@@ -1,0 +1,25 @@
+package com.project.handongjudge.problem.dto;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+public class ProblemResponse {
+    private Long id;
+    private String title;
+    private String description;
+    private String difficulty;
+    private LocalDateTime createdAt;
+    private Integer order;
+    private Double timeLimit;  // 초 단위
+    private Integer memoryLimit;  // MB 단위
+    /** 공백 엄격 채점(Domjudge validator_flags) 사용 여부 */
+    private Boolean strictWhitespaceGrading;
+    private Boolean isUsed;  // 사용 중인지 여부
+    private Integer assignmentCount;  // 사용 중인 과제 개수
+    private Integer problemSetCount;  // 사용 중인 문제집 개수
+    private Integer quizCount;  // 사용 중인 코딩테스트(퀴즈) 개수
+}

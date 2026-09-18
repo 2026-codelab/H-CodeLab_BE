@@ -1,0 +1,113 @@
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+
+spring:
+  #.env import
+  # below 2 lines are for local development, uncomment when you want to use .env file
+  config:
+    import: "optional:file:.env[.properties]"
+
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+    time-zone: Asia/Seoul
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql : true
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+ 
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+
+  # 이메일 발송 설정 (Gmail SMTP)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.debug: false
+
+  h2:
+    console:
+      enabled: true
+
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/api/login/oauth2/code/{registrationId}"   # ✅ 추가!
+            scope:
+              - email
+              - profile
+          github:
+            client-id: ${GITHUB_CLIENT_ID:your-github-client-id}
+            client-secret: ${GITHUB_CLIENT_SECRET:your-github-client-secret}
+            scope:
+              - user:email
+              - read:user
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  access-token:
+    expiration: 7200000 # 2시간
+  refresh-token:
+    expiration: 604800000 # 7일
+
+domjudge:
+  api:
+    url: ${DOMJUDGE_URL}
+  username: ${DOMJUDGE_ID}
+  password: ${DOMJUDGE_PW}
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  password-reset:
+    token-expire-minutes: 15
+  oauth2:
+    authorized-redirect-uris:
+      - http://localhost:3000/auth/callback  # 프론트엔드 콜백 페이지
+      #- https://hj.walab.info/handongjudge/auth/callback
+  # SSH → Redis (default: no profile). Disabled when spring.profiles.active=prod (see application-prod.yml)
+  ssh-tunnel:
+    enabled: ${SSH_TUNNEL_ENABLED:true}
+    host: ${SSH_TUNNEL_HOST:}
+    user: ${SSH_TUNNEL_USER:}
+    password: ${SSH_TUNNEL_PASSWORD:}
+    port: ${SSH_TUNNEL_PORT:22}
+    identity-path: ${SSH_IDENTITY_PATH:}
+    local-port: ${SSH_TUNNEL_LOCAL_PORT:6379}
+    remote-redis-host: ${SSH_REMOTE_REDIS_HOST:}
+    remote-redis-port: ${SSH_REMOTE_REDIS_PORT:6379}
+logging:
+  level:
+    com.project.handongjudge: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.type.descriptor.sql.BasicExtractor: TRACE  # 결과값도 보여줌
+

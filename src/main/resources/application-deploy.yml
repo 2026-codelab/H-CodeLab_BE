@@ -1,0 +1,65 @@
+# ===== 배포 환경 (SPRING_PROFILES_ACTIVE=deploy) — prod 운영 설정 병합 =====
+
+spring:
+  jpa:
+    show-sql: false
+  datasource:
+    hikari:
+      maximum-pool-size: 25
+      minimum-idle: 5
+      connection-timeout: 30000     # 커넥션 획득 최대 대기 시간 (ms)
+      idle-timeout: 600000          # 유휴 커넥션 유지 시간 (ms)
+      max-lifetime: 1800000         # 커넥션 최대 수명 (ms), MariaDB wait_timeout 이하
+      keepalive-time: 60000         # 유휴 커넥션 ping 주기 (ms)
+      pool-name: HikariPool-Deploy
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+
+logging:
+  level:
+    com.project.handongjudge: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: OFF
+    org.hibernate.type.descriptor.sql.BasicExtractor: OFF
+  logback:
+    rollingpolicy:
+      max-file-size: 200MB
+      max-history: 7
+      total-size-cap: 1GB
+  file:
+    name: /var/log/handongjudge/application.log
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+jwt:
+  access-token:
+    expiration: 7200000    # 2시간
+  refresh-token:
+    expiration: 604800000  # 7일
+
+auth:
+  cookie:
+    name: refreshToken
+    secure: true
+    same-site: None        # 프론트/백 도메인 분리 시 필요
+    domain: hcl.walab.info
+    max-age: 604800        # 7일 (초)
+    path: /
+  cors:
+    allowed-origins:
+      - https://hcl.walab.info
+
+app:
+  frontend-url: ${FRONTEND_URL:https://hcl.walab.info}
+  ssh-tunnel:
+    enabled: false
