@@ -494,17 +494,30 @@ public class DomjudgeService {
 
 
 
+    /**
+     * H-CodeLab 내부에서 쓰는 언어 키를 이 DOMjudge 인스턴스에 실제 등록된 language id로 변환한다.
+     * (GET /api/v4/languages 기준: c, cpp, java, python3 — "python"으로 보내면
+     * "Language 'python' not found or not submittable." 400이 남)
+     */
+    private static String toDomjudgeLanguageId(String language) {
+        if ("python".equals(language)) {
+            return "python3";
+        }
+        return language;
+    }
+
     public String submitCode(String cid, String teamId, String problemId, String language, File codeFile) {
         HttpHeaders headers = createAuthHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
         String url = DOMJUDGE_API_URL + "/api/v4/contests/" + cid + "/submissions?strict=false";
+        String domjudgeLanguageId = toDomjudgeLanguageId(language);
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("problem_id", problemId);
         body.add("problem", problemId);
-        body.add("language", language);
-        body.add("language_id", language);
+        body.add("language", domjudgeLanguageId);
+        body.add("language_id", domjudgeLanguageId);
         body.add("team_id", teamId);
         body.add("code", new FileSystemResource(codeFile));
 
