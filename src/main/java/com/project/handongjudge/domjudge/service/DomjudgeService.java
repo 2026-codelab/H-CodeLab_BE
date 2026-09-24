@@ -177,6 +177,25 @@ public class DomjudgeService {
         );
     }
 
+    /**
+     * cid가 externalid(문자열)로만 조회되는 contest용 오버로드.
+     * 참고: DOMjudge API v4에는 "문제를 완전히 삭제"하는 엔드포인트(DELETE /api/v4/problems/{id})가 없다
+     * (No route found) — 할 수 있는 건 contest에서 unlink하는 것뿐이라, 코딩 실습 스크래치 문제 정리는
+     * 이 메서드로 contest에서 떼어내는 방식으로 처리한다(문제 자체는 DOMjudge DB에 남지만 채점 대상에서는 빠짐).
+     */
+    public void removeProblemFromContest(String contestId, String domjudgeProblemId) {
+        HttpHeaders headers = createAuthHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String url = DOMJUDGE_API_URL + "/api/v4/contests/" + contestId + "/problems/" + domjudgeProblemId;
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("label", domjudgeProblemId);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+        restTemplate.exchange(url, HttpMethod.DELETE, requestEntity, String.class);
+    }
+
     public String uploadProblemToDomjudge(MultipartFile zipFile) throws IOException {
         HttpHeaders headers = createAuthHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -383,7 +402,33 @@ public class DomjudgeService {
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
         restTemplate.put(url, requestEntity);
-    }   
+    }
+
+    /** cid가 externalid(문자열)로만 조회되는 contest(예: 코딩 실습 스크래치 contest)용 오버로드. */
+    public void addProblemToContest(String contestId, String domjudgeProblemId) {
+        HttpHeaders headers = createAuthHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String url = DOMJUDGE_API_URL + "/api/v4/contests/" + contestId + "/problems/" + domjudgeProblemId;
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("label", domjudgeProblemId); // 반드시 포함
+        requestBody.put("lazy_eval_results", 2);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+
+        try {
+            restTemplate.exchange(url, HttpMethod.PUT, requestEntity, String.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 400 &&
+                    e.getResponseBodyAsString() != null &&
+                    e.getResponseBodyAsString().contains("already linked to contest")) {
+                log.info("문제가 이미 Contest에 연결되어 있습니다. 무시합니다. contestId: {}, problemId: {}", contestId, domjudgeProblemId);
+                return;
+            }
+            throw e;
+        }
+    }
 
     public String createTeam(Long userId, Long cid, String userName) {
         try {
