@@ -178,6 +178,7 @@ com.project.handongjudge
 │   ├── service/
 │   ├── repository/
 │   ├── entity/
+│   ├── enum/
 │   └── dto/
 ├── common/                # 여러 도메인에서 쓰는 공통 코드 (예외, 유틸 등)
 └── config/                # 설정 클래스
