@@ -213,8 +213,7 @@ com.project.handongjudge
 ## 7. API 규칙
 
 - URL은 **복수형 명사 + kebab-case**를 사용합니다.
-  - `GET /api/assignments/{assignmentId}` ✅
-  - `GET /api/getAssignment?id=1` ❌
+  - `GET /api/assignments/{assignmentId}`
 - HTTP 메서드의 의미를 지킵니다.
 
 | 메서드 | 용도 |
