@@ -406,14 +406,21 @@ public class UserController {
                         sectionData.put("createdAt", sur.getSection().getCreatedAt() != null
                                 ? sur.getSection().getCreatedAt().toString()
                                 : null);
-                        sectionData.put("sectionInfo", Map.of(
-                                "sectionId", sectionInfo.getSectionId(),
-                                "sectionNumber", sectionInfo.getSectionNumber() != null ? sectionInfo.getSectionNumber() : "",
-                                "courseTitle", sectionInfo.getCourseTitle() != null ? sectionInfo.getCourseTitle() : "",
-                                "instructorName", sectionInfo.getInstructorName() != null ? sectionInfo.getInstructorName() : "",
-                                "enrollmentCode", sectionInfo.getEnrollmentCode() != null ? sectionInfo.getEnrollmentCode() : "",
-                                "active", sectionInfo.getActive() != null ? sectionInfo.getActive() : false
-                        ));
+                        Map<String, Object> sectionInfoData = new HashMap<>();
+                        sectionInfoData.put("sectionId", sectionInfo.getSectionId());
+                        sectionInfoData.put("sectionNumber", sectionInfo.getSectionNumber() != null ? sectionInfo.getSectionNumber() : "");
+                        sectionInfoData.put("courseTitle", sectionInfo.getCourseTitle() != null ? sectionInfo.getCourseTitle() : "");
+                        sectionInfoData.put("instructorName", sectionInfo.getInstructorName() != null ? sectionInfo.getInstructorName() : "");
+                        sectionInfoData.put("enrollmentCode", sectionInfo.getEnrollmentCode() != null ? sectionInfo.getEnrollmentCode() : "");
+                        sectionInfoData.put("active", sectionInfo.getActive() != null ? sectionInfo.getActive() : false);
+                        // 년도/학기가 없는 기존 수업은 필드를 생략
+                        if (sectionInfo.getYear() != null) {
+                            sectionInfoData.put("year", sectionInfo.getYear());
+                        }
+                        if (sectionInfo.getSemester() != null) {
+                            sectionInfoData.put("semester", sectionInfo.getSemester());
+                        }
+                        sectionData.put("sectionInfo", sectionInfoData);
                         return sectionData;
                     })
                     .collect(java.util.stream.Collectors.toList());

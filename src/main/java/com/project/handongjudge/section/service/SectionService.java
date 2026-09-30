@@ -123,6 +123,8 @@ public class SectionService {
                 .isCurrentUserSectionStaff(staff)
                 .enrollmentCode(section.getEnrollmentCode())  // 추가
                 .active(section.getActive())  // 추가
+                .year(section.getYear())
+                .semester(section.getSemester())
                 .build();
     }
 
