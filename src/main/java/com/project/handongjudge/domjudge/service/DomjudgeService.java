@@ -599,8 +599,14 @@ public class DomjudgeService {
     }
 
     /**
-     * judgement 조회 후 output API에서 runs·output_compile을 파싱해 반환.
-     * CE(컴파일 에러)도 output_compile 수집을 위해 output API를 호출한다.
+     * judgement 조회 후 테스트케이스별 실제 출력/기대 출력/diff·컴파일 로그를 파싱해 반환.
+     *
+     * 주의: DOMjudge 표준 공개 API(v4, 9.0 기준)에는 이런 상세 정보를 주는 엔드포인트가 없다
+     * (팀/참가자에게는 웹 UI(team/submission)로만 노출하고 REST API로는 안 줌 — 대회 형평성 때문).
+     * 그래서 DOMjudge 소스(webapp/src/Controller/API/JudgementController.php)에
+     * team/SubmissionController와 동일한 조회를 하는 커스텀 엔드포인트
+     * "GET /contests/{cid}/judgements/{id}/detail"를 직접 추가해서 사용한다.
+     * (패치 위치: local-dev/domjudge-compose.yml 에서 이 파일 하나를 domserver 컨테이너에 bind mount)
      */
     public SubmissionOutputResponseDTO getResultOutput(String cid, String submissionId) throws JsonProcessingException {
         JudgementInfo info = getJudgementInfo(cid, submissionId);
@@ -611,7 +617,7 @@ public class DomjudgeService {
 
         try {
             HttpHeaders headers = createAuthHeaders();
-            String url = DOMJUDGE_API_URL + "/api/v4/contests/" + cid + "/judgements/" + submissionId + "/output";
+            String url = DOMJUDGE_API_URL + "/api/v4/contests/" + cid + "/judgements/" + info.judgementId + "/detail";
 
             log.debug("Request URL: " + url);
 
@@ -641,31 +647,37 @@ public class DomjudgeService {
         }
     }
 
-    private SubmissionOutputResponseDTO buildOutputResponse(JsonNode responseBody, String judgementResult)
-            throws JsonProcessingException {
-        if (responseBody == null) {
-            return SubmissionOutputResponseDTO.builder()
-                    .result(judgementResult)
-                    .outputList(Collections.emptyList())
-                    .build();
-        }
-
-        String outputCompile = null;
-        if (responseBody.has("output_compile") && !responseBody.get("output_compile").isNull()) {
-            outputCompile = responseBody.get("output_compile").asText();
-        }
-
-        JsonNode runsResponse = responseBody.get("runs");
+    private SubmissionOutputResponseDTO buildOutputResponse(JsonNode responseBody, String judgementResult) {
         List<Output> outputList = new ArrayList<>();
-        ObjectMapper mapper = new ObjectMapper();
+        String outputCompile = null;
 
-        if (runsResponse != null && runsResponse.isArray()) {
-            for (JsonNode runNode : runsResponse) {
-                Output output = mapper.treeToValue(runNode, Output.class);
-                if (runNode.has("runtime") && !runNode.get("runtime").isNull()) {
-                    output.setRuntime(secondsToRuntimeMs(runNode.get("runtime").asDouble()));
+        if (responseBody != null) {
+            if (responseBody.has("output_compile") && !responseBody.get("output_compile").isNull()) {
+                outputCompile = responseBody.get("output_compile").asText();
+            }
+
+            JsonNode runsNode = responseBody.get("runs");
+            if (runsNode != null && runsNode.isArray()) {
+                for (JsonNode runNode : runsNode) {
+                    String runResult = runNode.has("judgement_type_id") && !runNode.get("judgement_type_id").isNull()
+                            ? runNode.get("judgement_type_id").asText()
+                            : judgementResult;
+                    Output output = Output.builder()
+                            .testcase(runNode.has("ordinal") && !runNode.get("ordinal").isNull()
+                                    ? runNode.get("ordinal").asText() : null)
+                            // SubmissionService의 정답 카운트 로직이 "correct" 문자열을 기대하므로 매핑
+                            .result("AC".equals(runResult) ? "correct" : runResult)
+                            .output(textOrNull(runNode, "output_run"))
+                            .outputError(textOrNull(runNode, "output_error"))
+                            .outputDiff(textOrNull(runNode, "output_diff"))
+                            .testcase_input(textOrNull(runNode, "testcase_input"))
+                            .testcase_output(textOrNull(runNode, "expected_output"))
+                            .build();
+                    if (runNode.has("runtime") && !runNode.get("runtime").isNull()) {
+                        output.setRuntime(secondsToRuntimeMs(runNode.get("runtime").asDouble()));
+                    }
+                    outputList.add(output);
                 }
-                outputList.add(output);
             }
         }
 
@@ -674,6 +686,10 @@ public class DomjudgeService {
                 .outputList(outputList)
                 .outputCompile(outputCompile)
                 .build();
+    }
+
+    private static String textOrNull(JsonNode node, String field) {
+        return node.has(field) && !node.get(field).isNull() ? node.get(field).asText() : null;
     }
 
     /** DOMjudge runtime(초) → API/SSE용 밀리초 */
