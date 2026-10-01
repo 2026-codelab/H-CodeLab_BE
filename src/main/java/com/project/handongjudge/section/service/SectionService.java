@@ -82,7 +82,7 @@ public class SectionService {
                 .enrollmentCode(enrollmentCode)
                 .year(request.getYear())
                 .semester(request.getSemester())
-                .active(true) // 새로 생성된 수업은 바로 활성화 상태로 생성 (복사된 수업은 비활성화 유지)
+                .active(true) // 새로 생성된 수업은 바로 활성화 상태로 생성
                 .build();
 
         Section saved = sectionRepository.save(section);
@@ -238,7 +238,7 @@ public class SectionService {
                 .enrollmentCode(enrollmentCode)
                 .year(newYear)
                 .semester(newSemester)
-                .active(false) // 복사된 수업도 초기에 비활성화 상태로 생성
+                .active(true) // 복사된 수업도 바로 활성화 상태로 생성 (복사된 공지·과제는 비활성화 유지)
                 .build();
 
         Section savedSection = sectionRepository.save(newSection);
