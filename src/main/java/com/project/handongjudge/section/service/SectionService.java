@@ -17,6 +17,7 @@ import com.project.handongjudge.section.service.SectionRoleService;
 import com.project.handongjudge.user.entity.Enrollment;
 import com.project.handongjudge.user.entity.User;
 import com.project.handongjudge.user.repository.EnrollmentRepository;
+import com.project.handongjudge.user.repository.UserReadStatusRepository;
 import com.project.handongjudge.user.repository.UserRepository;
 import com.project.handongjudge.domjudge.service.DomjudgeService;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class SectionService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final UserReadStatusRepository userReadStatusRepository;
     private final DomjudgeService domjudgeService;
     private final SectionRoleService sectionRoleService;
     private final AssignmentRepository assignmentRepository;
@@ -181,17 +183,19 @@ public class SectionService {
             throw new IllegalArgumentException("해당 분반을 삭제할 권한이 없습니다");
         }
 
-        // FK 제약 회피: 해당 분반 과제를 참조하는 알림·성적 먼저 삭제
+        // FK 제약 회피: 해당 분반 과제를 참조하는 알림·성적·읽음 기록 먼저 삭제
         List<Long> assignmentIds = assignmentRepository.findAssignmentIdsBySectionId(sectionId);
         if (!assignmentIds.isEmpty()) {
             notificationRepository.deleteByAssignment_IdIn(assignmentIds);
             gradeRepository.deleteByAssignment_IdIn(assignmentIds);
+            userReadStatusRepository.deleteByAssignment_IdIn(assignmentIds);
         }
 
-        // FK 제약 회피: 해당 분반 공지를 참조하는 알림 먼저 삭제 (notice 삭제 시 notifications.notice_id FK 방지)
+        // FK 제약 회피: 해당 분반 공지를 참조하는 알림·읽음 기록 먼저 삭제 (notice 삭제 시 notifications/user_read_status.notice_id FK 방지)
         List<Long> noticeIds = noticeRepository.findNoticeIdsBySectionId(sectionId);
         if (!noticeIds.isEmpty()) {
             notificationRepository.deleteByNotice_IdIn(noticeIds);
+            userReadStatusRepository.deleteByNotice_IdIn(noticeIds);
         }
 
         // FK 제약 회피: 해당 분반 퀴즈 관련 데이터 선삭제 (quizzes.section_id FK 방지)
