@@ -37,7 +37,8 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "JOIN e.user u " +
             "JOIN e.section s " +
             "JOIN s.course c " +
-            "WHERE s.id = :sectionId")
+            "WHERE s.id = :sectionId " +
+            "AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR')")
     List<StudentDto> findStudentsBySectionId(@Param("sectionId") Long sectionId);
 
     @Query("SELECT new com.project.handongjudge.user.dto.StudentDto(" +
@@ -50,11 +51,13 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "JOIN e.section s " +
             "JOIN s.course c " +
             "WHERE s.instructor.id = :instructorId " +
+            "AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR') " +
             "ORDER BY c.title, s.sectionNumber, u.name")
     List<StudentDto> findStudentsByInstructorId(@Param("instructorId") Long instructorId);
     // 분반의 모든 학생 조회 (학생별 문제 풀이 현황용)
     @Query("SELECT e.user FROM Enrollment e " +
             "WHERE e.section.id = :sectionId " +
+            "AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR') " +
             "ORDER BY e.user.email")
     List<User> findUsersBySectionId(@Param("sectionId") Long sectionId);
 
@@ -73,7 +76,7 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "CAST(COALESCE(SUM(CASE WHEN a.isNew = true THEN 1 ELSE 0 END), 0) AS long), " +  // newAssignmentCount
             "CAST(COUNT(DISTINCT a.id) AS long), " +  // assignmentCount (추가)
             "CAST(COUNT(DISTINCT n.id) AS long), " +  // noticeCount
-            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id) AS long), " +  // studentCount
+            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id AND (e2.roleInCourse IS NULL OR e2.roleInCourse <> 'INSTRUCTOR')) AS long), " +  // studentCount
             "s.createdAt, " +                       // createdAt
             "s.year, " +                            // year
             "s.semester, " +                        // semester
@@ -94,7 +97,7 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "CAST(COALESCE(SUM(CASE WHEN n.isNew = true THEN 1 ELSE 0 END), 0) AS long), " +
             "CAST(COALESCE(SUM(CASE WHEN a.isNew = true THEN 1 ELSE 0 END), 0) AS long), " +
             "CAST(COUNT(DISTINCT a.id) AS long), CAST(COUNT(DISTINCT n.id) AS long), " +
-            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id) AS long), " +
+            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id AND (e2.roleInCourse IS NULL OR e2.roleInCourse <> 'INSTRUCTOR')) AS long), " +
             "s.createdAt, s.year, s.semester, s.enrollmentCode, COALESCE(s.active, true)) " +
             "FROM Section s " +
             "JOIN Course c ON s.course.id = c.id " +
@@ -116,7 +119,7 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "CAST(COALESCE(SUM(CASE WHEN a.isNew = true THEN 1 ELSE 0 END), 0) AS long), " +  // newAssignmentCount
             "CAST(COUNT(DISTINCT a.id) AS long), " +  // assignmentCount (추가)
             "CAST(COUNT(DISTINCT n.id) AS long), " +  // noticeCount
-            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id) AS long), " +  // studentCount
+            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id AND (e2.roleInCourse IS NULL OR e2.roleInCourse <> 'INSTRUCTOR')) AS long), " +  // studentCount
             "s.createdAt, " +                       // createdAt
             "s.year, " +                            // year
             "s.semester, " +                        // semester
@@ -144,7 +147,7 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "CAST(COALESCE(SUM(CASE WHEN a.isNew = true THEN 1 ELSE 0 END), 0) AS long), " +  // newAssignmentCount
             "CAST(COUNT(DISTINCT a.id) AS long), " +  // assignmentCount
             "CAST(COUNT(DISTINCT n.id) AS long), " +  // noticeCount
-            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id) AS long), " +  // studentCount
+            "CAST((SELECT COUNT(e2.id) FROM Enrollment e2 WHERE e2.section.id = s.id AND (e2.roleInCourse IS NULL OR e2.roleInCourse <> 'INSTRUCTOR')) AS long), " +  // studentCount
             "s.createdAt, " +                       // createdAt
             "s.year, " +                            // year
             "s.semester, " +                        // semester
@@ -159,12 +162,14 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "ORDER BY s.year DESC, s.semester, c.title, s.sectionNumber")
     List<DashboardCourseDto> findAllDashboardCourses();
 
-    // 섹션별 수강생 조회 (알림 발송용)
-    List<Enrollment> findBySection(Section section);
+    // 섹션별 수강생 조회 (알림 발송용, 교수 실습용 등록 제외)
+    @Query("SELECT e FROM Enrollment e WHERE e.section = :section AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR')")
+    List<Enrollment> findBySection(@Param("section") Section section);
     
     // 사용자 ID로 Enrollment 목록 조회
     List<Enrollment> findByUserId(Long userId);
     
-    // 특정 분반의 수강생 수
-    long countBySectionId(Long sectionId);
+    // 특정 분반의 수강생 수 (교수 실습용 등록 제외)
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.section.id = :sectionId AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR')")
+    long countBySectionId(@Param("sectionId") Long sectionId);
 }

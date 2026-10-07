@@ -14,7 +14,9 @@ import com.project.handongjudge.section.entity.Section;
 import com.project.handongjudge.section.repository.SectionRepository;
 import com.project.handongjudge.section.service.SectionRoleService;
 
+import com.project.handongjudge.user.entity.Enrollment;
 import com.project.handongjudge.user.entity.User;
+import com.project.handongjudge.user.repository.EnrollmentRepository;
 import com.project.handongjudge.user.repository.UserRepository;
 import com.project.handongjudge.domjudge.service.DomjudgeService;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +50,7 @@ public class SectionService {
     private final SectionRepository sectionRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final EnrollmentRepository enrollmentRepository;
     private final DomjudgeService domjudgeService;
     private final SectionRoleService sectionRoleService;
     private final AssignmentRepository assignmentRepository;
@@ -60,6 +63,29 @@ public class SectionService {
     private final QuizRepository quizRepository;
     private final QuizGradeRepository quizGradeRepository;
     private final QuizProblemRepository quizProblemRepository;
+
+    /**
+     * 교수가 자기 수업에서 코드 실행·제출을 해볼 수 있도록 DOMjudge 팀과 실습용 등록(roleInCourse=INSTRUCTOR)을 만든다.
+     * 이 등록은 학생 목록·수강생 수·성적·진도·학생 알림에서 제외된다 (EnrollmentRepository 쿼리 참고).
+     * DOMjudge 팀 생성이 실패해도 수업 생성은 그대로 진행한다.
+     */
+    private void enrollInstructorForPractice(Section section, User instructor) {
+        if (enrollmentRepository.existsByUserIdAndSectionId(instructor.getId(), section.getId())) {
+            return;
+        }
+        try {
+            String teamId = domjudgeService.createTeam(instructor.getId(), section.getId(), instructor.getName());
+            enrollmentRepository.save(Enrollment.builder()
+                    .user(instructor)
+                    .section(section)
+                    .teamId(teamId)
+                    .roleInCourse(Enrollment.ROLE_INSTRUCTOR)
+                    .joinedAt(LocalDateTime.now())
+                    .build());
+        } catch (Exception e) {
+            log.warn("교수 실습용 등록 실패 - sectionId: {}, userId: {}", section.getId(), instructor.getId(), e);
+        }
+    }
 
     private String generateEnrollmentCode() {
         // UUID 기반 고유 코드 생성
@@ -92,6 +118,9 @@ public class SectionService {
 
         // 수업 생성 시 자동으로 ADMIN 역할 부여
         sectionRoleService.assignAdminRole(saved.getId(), instructor.getId());
+
+        // 교수도 코드 실행·제출을 해볼 수 있도록 실습용 등록
+        enrollInstructorForPractice(saved, instructor);
 
         return SectionResponse.builder()
                 .id(saved.getId())
@@ -254,6 +283,9 @@ public class SectionService {
                 newSectionNumber,
                 finalTitle
         );
+
+        // 복사한 교수도 코드 실행·제출을 해볼 수 있도록 실습용 등록
+        enrollInstructorForPractice(savedSection, copyInstructor);
 
         // ✨ 1. 공지사항 복사 (선택된 공지사항만)
         if (copyNotices != null && copyNotices) {

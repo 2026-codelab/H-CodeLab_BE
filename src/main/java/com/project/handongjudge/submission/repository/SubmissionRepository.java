@@ -34,7 +34,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
 
     // 분반별 학생 수 (수강생 수)
-    @Query("SELECT COUNT(DISTINCT e.user.id) FROM Enrollment e WHERE e.section.id = :sectionId")
+    @Query("SELECT COUNT(DISTINCT e.user.id) FROM Enrollment e WHERE e.section.id = :sectionId " +
+            "AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR')")
     Integer countStudentsBySection(@Param("sectionId") Long sectionId);
     /** 과제의 모든 문제를 1번 이상 제출한 사용자 ID 목록 (제출 현황 인원 수 계산용) */
     @Query("SELECT s.user.id FROM Submission s " +
