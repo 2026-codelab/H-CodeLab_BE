@@ -37,6 +37,9 @@ import com.project.handongjudge.grade.repository.GradeRepository;
 import com.project.handongjudge.quiz.repository.QuizRepository;
 import com.project.handongjudge.quiz.repository.QuizGradeRepository;
 import com.project.handongjudge.quiz.repository.QuizProblemRepository;
+import com.project.handongjudge.progress.repository.CodeProgressRepository;
+import com.project.handongjudge.section.repository.ContestRepository;
+import com.project.handongjudge.submission.repository.SubmissionMetricRepository;
 import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -65,6 +68,9 @@ public class SectionService {
     private final QuizRepository quizRepository;
     private final QuizGradeRepository quizGradeRepository;
     private final QuizProblemRepository quizProblemRepository;
+    private final CodeProgressRepository codeProgressRepository;
+    private final ContestRepository contestRepository;
+    private final SubmissionMetricRepository submissionMetricRepository;
 
     /**
      * 교수가 자기 수업에서 코드 실행·제출을 해볼 수 있도록 DOMjudge 팀과 실습용 등록(roleInCourse=INSTRUCTOR)을 만든다.
@@ -205,6 +211,14 @@ public class SectionService {
             quizGradeRepository.deleteByQuiz_IdIn(quizIds);
             quizRepository.deleteBySection_Id(sectionId);
         }
+
+        // FK 제약 회피: cascade 대상이 아닌 분반 참조 데이터 선삭제
+        // (질문·댓글 알림, 제출 메트릭, 코드 진행 상황, contest)
+        notificationRepository.deleteByComment_Question_Section_Id(sectionId);
+        notificationRepository.deleteByQuestion_Section_Id(sectionId);
+        submissionMetricRepository.deleteBySubmission_Section_Id(sectionId);
+        codeProgressRepository.deleteBySection_Id(sectionId);
+        contestRepository.deleteBySection_Id(sectionId);
 
         // Section 삭제 (CASCADE 설정에 따라 관련 데이터도 함께 삭제됨)
         sectionRepository.delete(section);
