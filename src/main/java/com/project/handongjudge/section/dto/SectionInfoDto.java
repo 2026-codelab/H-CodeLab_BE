@@ -23,5 +23,6 @@ public class SectionInfoDto {
     private Boolean active;  // 추가
     private Integer year;  // 년도
     private String semester;  // 학기: SPRING, SUMMER, FALL, WINTER, CAMP, SPECIAL, IRREGULAR
+    private String language;  // 수업 언어: c, cpp, java, python
 
 }
