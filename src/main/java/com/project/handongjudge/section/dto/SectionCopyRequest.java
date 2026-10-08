@@ -19,6 +19,7 @@ public class SectionCopyRequest {
     private String semester;
     private String courseTitle;
     private String description;
+    private String language;  // 새 수업 언어: c, cpp, java, python (미지정 시 원본 수업 언어)
     private Boolean copyNotices;
     private Boolean copyAssignments;
     private List<Long> selectedNoticeIds;

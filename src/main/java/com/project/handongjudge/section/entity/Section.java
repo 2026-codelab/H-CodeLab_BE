@@ -55,6 +55,10 @@ public class Section {
     @Column(name = "semester", length = 10)
     private String semester;  // 학기: SPRING(1학기), SUMMER(여름학기), FALL(2학기), WINTER(겨울학기)
 
+    // 수업에서 사용할 프로그래밍 언어 (수업 생성·복사 시 선택). 기존 수업(null)은 C로 취급
+    @Column(name = "language", length = 20)
+    private String language;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -100,4 +104,33 @@ public class Section {
     @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<SectionUserRole> sectionUserRoles = new ArrayList<>();
+
+    /** 수업 언어로 선택할 수 있는 언어 키 (FE·DOMjudge 제출에서 쓰는 값과 동일) */
+    public static final List<String> SUPPORTED_LANGUAGES = List.of("c", "cpp", "java", "python");
+    public static final String DEFAULT_LANGUAGE = "c";
+
+    /** 언어 미지정(null/빈 값)은 C, 지원하지 않는 언어는 예외 */
+    public static String normalizeLanguage(String language) {
+        if (language == null || language.trim().isEmpty()) {
+            return DEFAULT_LANGUAGE;
+        }
+        String normalized = language.trim().toLowerCase();
+        if (!SUPPORTED_LANGUAGES.contains(normalized)) {
+            throw new IllegalArgumentException("지원하지 않는 언어입니다: " + language);
+        }
+        return normalized;
+    }
+
+    /** 언어 컬럼이 비어 있는 기존 수업은 C로 취급 */
+    public String getLanguageOrDefault() {
+        return (language == null || language.trim().isEmpty()) ? DEFAULT_LANGUAGE : language;
+    }
+
+    /** 제출 언어가 수업 언어와 다르면 예외 */
+    public void validateSubmissionLanguage(String submissionLanguage) {
+        if (submissionLanguage == null || !getLanguageOrDefault().equals(submissionLanguage.trim().toLowerCase())) {
+            throw new IllegalArgumentException(
+                    "이 수업은 " + getLanguageOrDefault() + " 언어로만 제출할 수 있습니다. (요청 언어: " + submissionLanguage + ")");
+        }
+    }
 }

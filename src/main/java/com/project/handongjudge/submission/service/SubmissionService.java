@@ -169,6 +169,8 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Problem not found"));
         Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                 .orElseThrow(() -> new RuntimeException("Section not found"));
+        // 수업에서 정한 언어로만 제출 가능
+        section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
         String contestId = String.valueOf(section.getId());
         String teamId = enrollmentRepository.findTeamIdByUserIdAndSectionId(user.getId(), section.getId());
@@ -282,6 +284,8 @@ public class SubmissionService {
                     .orElseThrow(() -> new RuntimeException("Problem not found"));
             Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                     .orElseThrow(() -> new RuntimeException("Section not found"));
+            // 수업에서 정한 언어로만 제출 가능
+            section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
             validateSubmission(
                     submissionRequestDTO.getProblemId(),
@@ -540,6 +544,8 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Problem not found"));
         Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                 .orElseThrow(() -> new RuntimeException("Section not found"));
+        // 수업에서 정한 언어로만 제출 가능
+        section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
         validateSubmission(
                 submissionRequestDTO.getProblemId(),
@@ -665,6 +671,8 @@ public class SubmissionService {
                     .orElseThrow(() -> new RuntimeException("Problem not found"));
             Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                     .orElseThrow(() -> new RuntimeException("Section not found"));
+            // 수업에서 정한 언어로만 제출 가능
+            section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
             Submission submission = Submission.builder()
                 .problem(problem)
@@ -751,6 +759,8 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Problem not found"));
         Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                 .orElseThrow(() -> new RuntimeException("Section not found"));
+        // 수업에서 정한 언어로만 제출 가능
+        section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
         validateSubmission(
                 submissionRequestDTO.getProblemId(),
@@ -947,6 +957,8 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Problem not found"));
         Section section = sectionRepository.findById(submissionRequestDTO.getSectionId())
                 .orElseThrow(() -> new RuntimeException("Section not found"));
+        // 수업에서 정한 언어로만 제출 가능
+        section.validateSubmissionLanguage(submissionRequestDTO.getLanguage());
 
         validateSubmission(
                 submissionRequestDTO.getProblemId(),
@@ -1235,6 +1247,8 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Problem not found"));
         Section section = sectionRepository.findById(dto.getSectionId())
                 .orElseThrow(() -> new RuntimeException("Section not found"));
+        // 수업에서 정한 언어로만 제출 가능
+        section.validateSubmissionLanguage(dto.getLanguage());
 
         validateSubmission(dto.getProblemId(), dto.getSectionId(), userId);
 

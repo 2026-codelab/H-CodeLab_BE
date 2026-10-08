@@ -213,7 +213,8 @@ public class SectionController {
                     instructorId,
                     request.getNoticeEdits(),            // 수정된 공지사항 데이터
                     request.getAssignmentEdits(),        // 수정된 과제 데이터
-                    request.getProblemEdits()           // 수정된 문제 데이터
+                    request.getProblemEdits(),          // 수정된 문제 데이터
+                    request.getLanguage()               // 새 수업 언어 (미지정 시 원본 언어)
             );
 
             return ResponseEntity.ok(Map.of(

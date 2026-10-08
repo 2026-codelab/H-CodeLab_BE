@@ -108,6 +108,7 @@ public class SectionService {
                 .enrollmentCode(enrollmentCode)
                 .year(request.getYear())
                 .semester(request.getSemester())
+                .language(Section.normalizeLanguage(request.getLanguage()))
                 .active(true) // 새로 생성된 수업은 바로 활성화 상태로 생성
                 .build();
 
@@ -154,6 +155,7 @@ public class SectionService {
                 .active(section.getActive())  // 추가
                 .year(section.getYear())
                 .semester(section.getSemester())
+                .language(section.getLanguageOrDefault())
                 .build();
     }
 
@@ -229,7 +231,8 @@ public class SectionService {
                             Map<Long, List<Long>> assignmentProblems, Long instructorId,
                             Map<Long, NoticeEditData> noticeEdits,
                             Map<Long, AssignmentEditData> assignmentEdits,
-                            Map<Long, ProblemEditData> problemEdits) throws IOException {
+                            Map<Long, ProblemEditData> problemEdits,
+                            String newLanguage) throws IOException {
         Section sourceSection = sectionRepository.findById(sourceSectionId)
                 .orElseThrow(() -> new IllegalArgumentException("원본 Section을 찾을 수 없습니다: " + sourceSectionId));
 
@@ -269,6 +272,9 @@ public class SectionService {
                 .enrollmentCode(enrollmentCode)
                 .year(newYear)
                 .semester(newSemester)
+                .language(newLanguage == null || newLanguage.trim().isEmpty()
+                        ? sourceSection.getLanguageOrDefault()
+                        : Section.normalizeLanguage(newLanguage))
                 .active(true) // 복사된 수업도 바로 활성화 상태로 생성 (복사된 공지·과제는 비활성화 유지)
                 .build();
 
