@@ -18,12 +18,16 @@ import com.project.handongjudge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * 힌트 요청 전체 흐름(설계 문서 2장)을 조합하는 오케스트레이터.
- * "테스트하기"는 Submission을 DB에 저장하지 않으므로, 힌트는 problemId + 학생이 선택한
- * 테스트케이스 정보(HintRequestDTO)를 받아 바로 분류·생성·검증한다.
- * ①분류 → ②생성(이력 반영) → ③검증 게이트(최대 3회 재시도) → 표시+로깅+사용횟수 차감.
+ * "테스트하기"는 Submission을 DB에 저장하지 않으므로, problemId + HintRequestDTO(학생 코드 +
+ * 컴파일 메시지 또는 실패한 테스트케이스 전체)를 받아 바로 분류·생성·검증한다.
+ *
+ * 컴파일 에러(outputCompile 존재)는 힌트 사용 횟수를 소모하지 않는다 — 컴파일러 메시지는 이미
+ * 학생에게 전부 공개되어 있어 "유출"의 의미가 없고, 단순히 그 메시지를 쉬운 말로 풀어주는 것뿐이라
+ * 3회 제한의 대상인 "코드 로직에 대한 힌트"와는 성격이 다르기 때문.
  */
 @Slf4j
 @Service
@@ -56,37 +60,57 @@ public class HintService {
     }
 
     public HintResponseDTO requestHint(Long userId, Long problemId, HintRequestDTO request) {
-        if ("correct".equals(request.getResult())) {
-            throw new CustomException("정답 테스트케이스에는 힌트가 필요 없습니다.", "ALREADY_CORRECT");
-        }
+        boolean isCompileError = StringUtils.hasText(request.getOutputCompile());
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", "USER_NOT_FOUND"));
         Problem problem = problemRepository.findById(problemId)
                 .orElseThrow(() -> new CustomException("문제를 찾을 수 없습니다.", "PROBLEM_NOT_FOUND"));
 
-        HintUsage usage = hintUsageRepository
-                .findByUser_IdAndProblem_Id(userId, problemId)
-                .orElseGet(() -> HintUsage.builder().user(user).problem(problem).usedCount(0).build());
-
-        if (usage.getUsedCount() >= MAX_HINT_USES_PER_PROBLEM) {
-            throw new CustomException("이 문제에서 힌트를 모두 사용했습니다(최대 " + MAX_HINT_USES_PER_PROBLEM + "회).", "HINT_LIMIT_EXCEEDED");
+        HintUsage usage = null;
+        if (!isCompileError) {
+            if (request.getTestcases() == null || request.getTestcases().isEmpty()) {
+                throw new CustomException("힌트를 생성할 실패한 테스트케이스 정보가 없습니다.", "NO_FAILING_TESTCASES");
+            }
+            usage = hintUsageRepository
+                    .findByUser_IdAndProblem_Id(userId, problemId)
+                    .orElseGet(() -> HintUsage.builder().user(user).problem(problem).usedCount(0).build());
+            if (usage.getUsedCount() >= MAX_HINT_USES_PER_PROBLEM) {
+                throw new CustomException("이 문제에서 힌트를 모두 사용했습니다(최대 " + MAX_HINT_USES_PER_PROBLEM + "회).", "HINT_LIMIT_EXCEEDED");
+            }
         }
 
-        ClassificationResult classification = errorClassifier.classify(request);
+        ClassificationResult classification = isCompileError
+                ? errorClassifier.classifyCompileError(request.getCode(), request.getOutputCompile())
+                : errorClassifier.classify(request.getCode(), request.getTestcases());
+
         int repeatCount = incrementMistakeCount(user, classification);
         HintTier tier = HintTier.fromRepeatCount(repeatCount);
 
-        GenerationOutcome outcome = generateWithGate(problem, request.getTestcaseRank(), classification, tier, repeatCount);
+        Integer representativeTestcaseRank = (!isCompileError)
+                ? request.getTestcases().get(0).getTestcaseRank()
+                : null;
 
-        usage.setUsedCount(usage.getUsedCount() + 1);
-        hintUsageRepository.save(usage);
+        GenerationOutcome outcome = generateWithGate(
+                request.getCode(), problem, representativeTestcaseRank, classification, tier, repeatCount);
+
+        int remainingUses;
+        if (isCompileError) {
+            remainingUses = MAX_HINT_USES_PER_PROBLEM - hintUsageRepository
+                    .findByUser_IdAndProblem_Id(userId, problemId)
+                    .map(HintUsage::getUsedCount)
+                    .orElse(0);
+        } else {
+            usage.setUsedCount(usage.getUsedCount() + 1);
+            hintUsageRepository.save(usage);
+            remainingUses = MAX_HINT_USES_PER_PROBLEM - usage.getUsedCount();
+        }
 
         return HintResponseDTO.builder()
                 .hint(outcome.hint)
                 .category(classification.getCategory().name())
                 .tier(tier.name())
-                .remainingUses(MAX_HINT_USES_PER_PROBLEM - usage.getUsedCount())
+                .remainingUses(remainingUses)
                 .usedFallback(outcome.usedFallback)
                 .build();
     }
@@ -104,10 +128,10 @@ public class HintService {
         return mistakeCount.getCount();
     }
 
-    private GenerationOutcome generateWithGate(Problem problem, Integer testcaseRank, ClassificationResult classification,
-                                                HintTier tier, int repeatCount) {
+    private GenerationOutcome generateWithGate(String code, Problem problem, Integer testcaseRank,
+                                                ClassificationResult classification, HintTier tier, int repeatCount) {
         for (int attempt = 1; attempt <= MAX_GATE_RETRIES; attempt++) {
-            String candidate = hintGenerator.generate(problem.getDescription(), classification, tier, repeatCount);
+            String candidate = hintGenerator.generate(code, problem.getDescription(), classification, tier, repeatCount);
             GateResult gate = hintValidator.validate(candidate, classification);
             boolean isLastAttempt = attempt == MAX_GATE_RETRIES;
 

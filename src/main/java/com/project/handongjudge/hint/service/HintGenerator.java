@@ -11,19 +11,21 @@ import org.springframework.stereotype.Component;
 public class HintGenerator {
 
     private static final double GENERATION_TEMPERATURE = 0.5;
+    private static final int CODE_MAX_LEN = 4000;
 
     private final LlmClient llmClient;
 
-    public String generate(String problemDescription, ClassificationResult classification, HintTier tier, int repeatCount) {
+    public String generate(String code, String problemDescription, ClassificationResult classification,
+                            HintTier tier, int repeatCount) {
         String system = buildSystemPrompt(tier, repeatCount);
-        String user = buildUserPrompt(problemDescription, classification);
+        String user = buildUserPrompt(code, problemDescription, classification);
         return llmClient.complete(system, user, GENERATION_TEMPERATURE);
     }
 
     private String buildSystemPrompt(HintTier tier, int repeatCount) {
         StringBuilder sb = new StringBuilder();
         sb.append("너는 프로그래밍 수업에서 학생에게 힌트를 주는 조교다. ")
-          .append("절대 정답 코드나 수정된 코드 줄을 그대로 적지 마라. ");
+          .append("학생 코드를 참고해서 구체적으로 짚어주되, 절대 정답 코드나 수정된 코드 줄을 그대로 적지 마라. ");
 
         switch (tier) {
             case SOCRATIC:
@@ -40,13 +42,23 @@ public class HintGenerator {
                   .append("문장 맨 앞에 명시해라.");
                 break;
         }
-        sb.append(" 한국어로, 2~3문장 이내로 답해라.");
+        sb.append(" 여러 테스트케이스가 실패했다면 개별 케이스를 나열하지 말고 공통 원인 하나로 통합해서 설명해라.");
+        sb.append(" 한국어로, 2~4문장 이내로 답해라.");
         return sb.toString();
     }
 
-    private String buildUserPrompt(String problemDescription, ClassificationResult classification) {
-        return "문제 설명:\n" + problemDescription + "\n\n"
-                + "오류 유형: " + classification.getCategory() + "\n"
-                + "실패 지점 요약: " + classification.getLocalizedSummary();
+    private String buildUserPrompt(String code, String problemDescription, ClassificationResult classification) {
+        StringBuilder sb = new StringBuilder();
+        if (code != null && !code.isBlank()) {
+            sb.append("학생 코드:\n```\n").append(truncateCode(code)).append("\n```\n\n");
+        }
+        sb.append("문제 설명:\n").append(problemDescription).append("\n\n")
+          .append("오류 유형: ").append(classification.getCategory()).append("\n")
+          .append("실패 지점 요약: ").append(classification.getLocalizedSummary());
+        return sb.toString();
+    }
+
+    private static String truncateCode(String code) {
+        return code.length() <= CODE_MAX_LEN ? code : code.substring(0, CODE_MAX_LEN) + "\n... (생략)";
     }
 }
