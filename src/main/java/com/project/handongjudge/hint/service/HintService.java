@@ -3,6 +3,7 @@ package com.project.handongjudge.hint.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.project.handongjudge.common.exception.CustomException;
 import com.project.handongjudge.hint.dto.HintResponseDTO;
+import com.project.handongjudge.hint.dto.HintUsageResponseDTO;
 import com.project.handongjudge.hint.entity.HintLog;
 import com.project.handongjudge.hint.entity.HintTier;
 import com.project.handongjudge.hint.entity.HintUsage;
@@ -40,6 +41,25 @@ public class HintService {
     private final HintUsageRepository hintUsageRepository;
     private final MistakeCategoryCountRepository mistakeCategoryCountRepository;
     private final HintLogRepository hintLogRepository;
+
+    /** 힌트를 소모하지 않고 현재 남은 사용 횟수만 조회 (버튼 초기 표시/새로고침용). */
+    public HintUsageResponseDTO getRemainingUses(Long userId, Long submissionDbId) {
+        Submission submission = submissionRepository.findById(submissionDbId)
+                .orElseThrow(() -> new CustomException("제출을 찾을 수 없습니다.", "SUBMISSION_NOT_FOUND"));
+        if (submission.getUser() == null || !submission.getUser().getId().equals(userId)) {
+            throw new CustomException("본인의 제출만 조회할 수 있습니다.", "FORBIDDEN");
+        }
+
+        int usedCount = hintUsageRepository
+                .findByUser_IdAndProblem_Id(userId, submission.getProblem().getId())
+                .map(HintUsage::getUsedCount)
+                .orElse(0);
+
+        return HintUsageResponseDTO.builder()
+                .remainingUses(MAX_HINT_USES_PER_PROBLEM - usedCount)
+                .maxUses(MAX_HINT_USES_PER_PROBLEM)
+                .build();
+    }
 
     public HintResponseDTO requestHint(Long userId, Long submissionDbId) {
         Submission submission = submissionRepository.findById(submissionDbId)
