@@ -1,6 +1,6 @@
 package com.project.handongjudge.hint.entity;
 
-import com.project.handongjudge.submission.entity.Submission;
+import com.project.handongjudge.problem.entity.Problem;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -8,8 +8,9 @@ import javax.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * 검증 게이트 시도 로그. 설계 문서 5장 "유출률 측정 계획"의 로그 스키마를 그대로 따름.
- * submission_id, 시도_번호, 정확성_게이트_결과, 유출_게이트_결과, 최종_결과
+ * 검증 게이트 시도 로그. 설계 문서 5장 "유출률 측정 계획"의 로그 스키마를 따름.
+ * 테스트하기는 Submission을 DB에 저장하지 않으므로 problem + testcaseRank로 식별한다.
+ * (submission_id 대신) problem_id, testcase_rank, 시도_번호, 정확성_게이트_결과, 유출_게이트_결과, 최종_결과
  */
 @Entity
 @Table(name = "hint_logs")
@@ -25,8 +26,12 @@ public class HintLog {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "submission_id")
-    private Submission submission;
+    @JoinColumn(name = "problem_id")
+    private Problem problem;
+
+    /** CE처럼 특정 테스트케이스가 없는 경우 null */
+    @Column(name = "testcase_rank")
+    private Integer testcaseRank;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "category", length = 40)

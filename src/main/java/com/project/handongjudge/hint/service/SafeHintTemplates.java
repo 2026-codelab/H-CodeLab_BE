@@ -25,6 +25,7 @@ public final class SafeHintTemplates {
         TEMPLATES.put(ErrorCategory.PARTIAL_LOGIC_ERROR, "일부 테스트케이스에서만 실패하고 있습니다. 실패하는 입력들에 공통된 조건이 있는지 다시 살펴보세요.");
         TEMPLATES.put(ErrorCategory.WRONG_APPROACH, "현재 접근 방식이 문제의 요구 조건을 만족하는지부터 다시 검토해보세요.");
         TEMPLATES.put(ErrorCategory.INEFFICIENT_ALGORITHM, "현재 알고리즘의 시간 복잡도를 계산해보고, 더 효율적인 방법이 있는지 검토해보세요.");
+        TEMPLATES.put(ErrorCategory.MEMORY_LIMIT_EXCEEDED, "불필요하게 큰 배열/자료구조를 선언하고 있는지, 재귀 깊이가 너무 깊지 않은지 확인해보세요.");
 
         TEMPLATES.put(ErrorCategory.INVALID_MEMORY_ACCESS, "배열이나 포인터가 유효한 범위 밖을 가리키고 있는지 확인해보세요.");
         TEMPLATES.put(ErrorCategory.DIVISION_BY_ZERO, "나누는 값이 0이 될 수 있는 경우가 있는지 입력 범위를 다시 확인해보세요.");

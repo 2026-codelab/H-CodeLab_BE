@@ -2,13 +2,11 @@ package com.project.handongjudge.hint.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.handongjudge.hint.dto.HintRequestDTO;
 import com.project.handongjudge.hint.entity.ErrorCategory;
 import com.project.handongjudge.hint.llm.LlmClient;
-import com.project.handongjudge.submission.entity.Output;
-import com.project.handongjudge.submission.dto.SubmissionOutputResponseDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -16,11 +14,11 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * ① 오류 유형 분류. 설계 문서 3장의 규칙을 그대로 구현.
- * 규칙으로 깔끔히 맞는 경우 LLM 호출 없이 즉시 분류하고, 애매한 경우(PARTIAL_LOGIC_ERROR,
- * UNCATEGORIZED_RUNTIME_ERROR)만 보조 LLM 호출로 세분화한다.
- * 분류 자체가 어떻게 끝나든, 힌트 생성(②)은 항상 별도로 LLM을 호출한다 — 여기서 결정되는 건
- * "카테고리 + localize된 실패 지점 요약"뿐이다.
+ * ① 오류 유형 분류 (설계 문서 3장). "테스트하기"에서 학생이 고른 테스트케이스 하나를 대상으로 분류한다.
+ * DOMjudge가 이미 테스트케이스별로 세분화된 판정(wrong-answer/presentation-error/run-error/...)을
+ * 주기 때문에, 이전 버전처럼 WA 전체를 diff 패턴으로 다시 추측할 필요가 줄었다 — 특히
+ * presentation-error/timelimit/memory-limit은 DOMjudge 판정 자체가 곧 카테고리다.
+ * 규칙으로 깔끔히 안 맞는 경우(wrong-answer의 세부 원인, run-error의 신호 종류)만 보조 LLM을 쓴다.
  */
 @Slf4j
 @Component
@@ -32,30 +30,45 @@ public class ErrorClassifier {
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
 
-    public ClassificationResult classify(String topLevelResult, SubmissionOutputResponseDTO output) {
-        switch (topLevelResult) {
-            case "CE":
-                return classifyCompileError(output.getOutputCompile());
-            case "TLE":
+    public ClassificationResult classify(HintRequestDTO request) {
+        String result = request.getResult() == null ? "" : request.getResult();
+
+        switch (result) {
+            case "compiler-error":
+                return classifyCompileError(request.getOutputCompile());
+            case "presentation-error":
+                return new ClassificationResult(ErrorCategory.OUTPUT_FORMAT_MISMATCH, describeFailure(request), true);
+            case "timelimit":
                 return new ClassificationResult(
                         ErrorCategory.INEFFICIENT_ALGORITHM,
                         "시간 제한 내에 결과를 출력하지 못해 시간 초과로 채점이 종료되었습니다.",
                         true
                 );
-            case "RE":
-                return classifyRuntimeError(output.getOutputList());
-            case "WA":
-                return classifyWrongAnswer(output.getOutputList());
+            case "memory-limit":
+                return new ClassificationResult(
+                        ErrorCategory.MEMORY_LIMIT_EXCEEDED,
+                        "메모리 제한을 초과했습니다.",
+                        true
+                );
+            case "run-error":
+                return classifyRuntimeError(request);
+            case "wrong-answer":
+                return classifyWrongAnswer(request);
+            case "no-output":
+                return askLlmToClassify(
+                        "프로그램이 아무 출력도 내지 않았습니다.\n" + describeFailure(request),
+                        List.of(ErrorCategory.WRONG_APPROACH, ErrorCategory.UNCATEGORIZED_RUNTIME_ERROR, ErrorCategory.UNCERTAIN)
+                );
             default:
                 return new ClassificationResult(
                         ErrorCategory.UNCERTAIN,
-                        "자동으로 원인을 분류할 수 없는 채점 결과입니다(" + topLevelResult + ").",
+                        "자동으로 원인을 분류할 수 없는 채점 결과입니다(" + result + ").",
                         true
                 );
         }
     }
 
-    // ---------------------------------------------------------------- CE
+    // ---------------------------------------------------------------- compiler-error
 
     private ClassificationResult classifyCompileError(String compileOutput) {
         String text = compileOutput == null ? "" : compileOutput;
@@ -80,65 +93,44 @@ public class ErrorClassifier {
         );
     }
 
-    // ---------------------------------------------------------------- RE
+    // ---------------------------------------------------------------- run-error
 
-    private ClassificationResult classifyRuntimeError(List<Output> outputs) {
-        Output failing = findFirstFailing(outputs);
-        String signal = (failing == null) ? "" : nullToEmpty(failing.getOutputError()) + " " + nullToEmpty(failing.getResult());
+    private ClassificationResult classifyRuntimeError(HintRequestDTO request) {
+        String signal = nullToEmpty(request.getOutputError());
 
         if (containsAny(signal, "segmentation", "sigsegv")) {
-            return new ClassificationResult(ErrorCategory.INVALID_MEMORY_ACCESS, describeFailure(failing), true);
+            return new ClassificationResult(ErrorCategory.INVALID_MEMORY_ACCESS, describeFailure(request), true);
         }
         if (containsAny(signal, "floating point exception", "sigfpe", "divide by zero", "division by zero")) {
-            return new ClassificationResult(ErrorCategory.DIVISION_BY_ZERO, describeFailure(failing), true);
+            return new ClassificationResult(ErrorCategory.DIVISION_BY_ZERO, describeFailure(request), true);
         }
         if (containsAny(signal, "stack overflow", "sigabrt", "aborted")) {
-            return new ClassificationResult(ErrorCategory.STACK_OVERFLOW, describeFailure(failing), true);
+            return new ClassificationResult(ErrorCategory.STACK_OVERFLOW, describeFailure(request), true);
         }
 
         return askLlmToClassify(
-                "런타임 에러 정보:\n" + describeFailure(failing),
+                "런타임 에러 정보:\n" + describeFailure(request),
                 List.of(ErrorCategory.INVALID_MEMORY_ACCESS, ErrorCategory.DIVISION_BY_ZERO,
                         ErrorCategory.STACK_OVERFLOW, ErrorCategory.UNCATEGORIZED_RUNTIME_ERROR, ErrorCategory.UNCERTAIN)
         );
     }
 
-    // ---------------------------------------------------------------- WA
+    // ---------------------------------------------------------------- wrong-answer
 
-    private ClassificationResult classifyWrongAnswer(List<Output> outputs) {
-        List<Output> failing = outputs.stream()
-                .filter(o -> !isPassing(o))
-                .collect(Collectors.toList());
-
-        if (failing.isEmpty()) {
-            return new ClassificationResult(ErrorCategory.WRONG_APPROACH, "실패한 테스트케이스를 찾지 못했습니다.", true);
+    private ClassificationResult classifyWrongAnswer(HintRequestDTO request) {
+        Integer diff = numericDiff(request.getExpectedOutput(), request.getOutput());
+        if (diff != null && diff != 0) {
+            return new ClassificationResult(ErrorCategory.OFF_BY_ONE, describeFailure(request), true);
         }
 
-        Output representative = failing.get(0);
-
-        if (isOutputFormatMismatch(representative)) {
-            return new ClassificationResult(ErrorCategory.OUTPUT_FORMAT_MISMATCH, describeFailure(representative), true);
+        if (looksLikeEdgeCase(request.getTestcaseInput())) {
+            return new ClassificationResult(ErrorCategory.EDGE_CASE_MISSING, describeFailure(request), true);
         }
 
-        Integer constantDiff = findConstantNumericDiff(failing);
-        if (constantDiff != null && constantDiff != 0) {
-            return new ClassificationResult(ErrorCategory.OFF_BY_ONE, describeFailure(representative), true);
-        }
-
-        boolean allFail = failing.size() == outputs.size();
-        if (allFail) {
-            return new ClassificationResult(ErrorCategory.WRONG_APPROACH, describeFailure(representative), true);
-        }
-
-        boolean onlyOneEdgeLikeFailure = failing.size() == 1 && looksLikeEdgeCase(representative);
-        if (onlyOneEdgeLikeFailure) {
-            return new ClassificationResult(ErrorCategory.EDGE_CASE_MISSING, describeFailure(representative), true);
-        }
-
-        // 일부만 간헐적 실패 — 규칙으로 깔끔히 안 맞음, 보조 LLM 분류
+        // 규칙으로 깔끔히 안 맞음 — 보조 LLM 분류 (presentation-error는 DOMjudge가 이미 별도로 구분해주므로 후보에서 제외)
         return askLlmToClassify(
-                "일부 테스트케이스만 실패했습니다.\n" + describeFailure(representative),
-                List.of(ErrorCategory.OFF_BY_ONE, ErrorCategory.EDGE_CASE_MISSING, ErrorCategory.OUTPUT_FORMAT_MISMATCH,
+                "오답(wrong-answer) 테스트케이스입니다.\n" + describeFailure(request),
+                List.of(ErrorCategory.OFF_BY_ONE, ErrorCategory.EDGE_CASE_MISSING,
                         ErrorCategory.WRONG_APPROACH, ErrorCategory.PARTIAL_LOGIC_ERROR, ErrorCategory.UNCERTAIN)
         );
     }
@@ -170,44 +162,14 @@ public class ErrorClassifier {
 
     // ---------------------------------------------------------------- 헬퍼
 
-    private static boolean isPassing(Output output) {
-        String result = nullToEmpty(output.getResult());
-        return result.equalsIgnoreCase("AC") || result.equalsIgnoreCase("correct");
-    }
-
-    private static Output findFirstFailing(List<Output> outputs) {
-        if (outputs == null) {
+    /** 기대 출력/실제 출력이 둘 다 정수 하나뿐이면 그 차이를, 아니면 null을 반환. */
+    private static Integer numericDiff(String expected, String actual) {
+        Integer e = parseSingleInt(expected);
+        Integer a = parseSingleInt(actual);
+        if (e == null || a == null) {
             return null;
         }
-        return outputs.stream().filter(o -> !isPassing(o)).findFirst().orElse(null);
-    }
-
-    private static boolean isOutputFormatMismatch(Output output) {
-        String expected = normalizeWhitespace(output.getTestcase_output());
-        String actual = normalizeWhitespace(output.getOutput());
-        if (expected == null || actual == null) {
-            return false;
-        }
-        return expected.equals(actual) && !expected.equals(nullToEmpty(output.getTestcase_output()).trim());
-    }
-
-    /** 실패한 케이스들의 (실제-기대) 수치 차이가 전부 같은 0이 아닌 상수면 off-by-one으로 간주. */
-    private static Integer findConstantNumericDiff(List<Output> failing) {
-        Integer diff = null;
-        for (Output o : failing) {
-            Integer expected = parseSingleInt(o.getTestcase_output());
-            Integer actual = parseSingleInt(o.getOutput());
-            if (expected == null || actual == null) {
-                return null;
-            }
-            int d = actual - expected;
-            if (diff == null) {
-                diff = d;
-            } else if (!diff.equals(d)) {
-                return null;
-            }
-        }
-        return diff;
+        return a - e;
     }
 
     private static Integer parseSingleInt(String text) {
@@ -222,28 +184,21 @@ public class ErrorClassifier {
     }
 
     /** 입력이 비어있거나 매우 짧으면(경계값으로 추정) edge-case-missing 후보로 간주. */
-    private static boolean looksLikeEdgeCase(Output output) {
-        String input = nullToEmpty(output.getTestcase_input()).trim();
+    private static boolean looksLikeEdgeCase(String testcaseInput) {
+        String input = nullToEmpty(testcaseInput).trim();
         return input.isEmpty() || input.length() <= 2;
     }
 
-    private static String describeFailure(Output output) {
-        if (output == null) {
-            return "실패한 테스트케이스 정보를 가져오지 못했습니다.";
-        }
+    private static String describeFailure(HintRequestDTO request) {
         return String.format(
                 "테스트케이스 %s: 입력 `%s` → 기대 출력 `%s`, 실제 출력 `%s`%s",
-                nullToEmpty(output.getTestcase()),
-                truncate(output.getTestcase_input()),
-                truncate(output.getTestcase_output()),
-                truncate(output.getOutput()),
-                output.getOutputError() == null || output.getOutputError().isEmpty()
-                        ? "" : (", 에러 출력: `" + truncate(output.getOutputError()) + "`")
+                request.getTestcaseRank() == null ? "?" : request.getTestcaseRank(),
+                truncate(request.getTestcaseInput()),
+                truncate(request.getExpectedOutput()),
+                truncate(request.getOutput()),
+                request.getOutputError() == null || request.getOutputError().isEmpty()
+                        ? "" : (", 에러 출력: `" + truncate(request.getOutputError()) + "`")
         );
-    }
-
-    private static String normalizeWhitespace(String text) {
-        return text == null ? null : text.trim().replaceAll("\\s+", " ");
     }
 
     private static boolean containsAny(String text, String... needles) {

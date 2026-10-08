@@ -1,7 +1,7 @@
 package com.project.handongjudge.hint.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.project.handongjudge.common.exception.CustomException;
+import com.project.handongjudge.hint.dto.HintRequestDTO;
 import com.project.handongjudge.hint.dto.HintResponseDTO;
 import com.project.handongjudge.hint.dto.HintUsageResponseDTO;
 import com.project.handongjudge.hint.entity.HintLog;
@@ -11,19 +11,19 @@ import com.project.handongjudge.hint.entity.MistakeCategoryCount;
 import com.project.handongjudge.hint.repository.HintLogRepository;
 import com.project.handongjudge.hint.repository.HintUsageRepository;
 import com.project.handongjudge.hint.repository.MistakeCategoryCountRepository;
-import com.project.handongjudge.domjudge.service.DomjudgeService;
-import com.project.handongjudge.submission.dto.SubmissionOutputResponseDTO;
-import com.project.handongjudge.submission.entity.Submission;
-import com.project.handongjudge.submission.repository.SubmissionRepository;
+import com.project.handongjudge.problem.entity.Problem;
+import com.project.handongjudge.problem.repository.ProblemRepository;
+import com.project.handongjudge.user.entity.User;
+import com.project.handongjudge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
  * 힌트 요청 전체 흐름(설계 문서 2장)을 조합하는 오케스트레이터.
+ * "테스트하기"는 Submission을 DB에 저장하지 않으므로, 힌트는 problemId + 학생이 선택한
+ * 테스트케이스 정보(HintRequestDTO)를 받아 바로 분류·생성·검증한다.
  * ①분류 → ②생성(이력 반영) → ③검증 게이트(최대 3회 재시도) → 표시+로깅+사용횟수 차감.
- * 외부 호출(DOMjudge, LLM)이 섞여 있어 전체를 한 DB 트랜잭션으로 묶지 않고,
- * 각 저장은 그때그때 커밋한다(OSIV가 활성화되어 있어 지연 로딩은 요청 범위 내에서 안전).
  */
 @Slf4j
 @Service
@@ -33,8 +33,8 @@ public class HintService {
     private static final int MAX_HINT_USES_PER_PROBLEM = 3;
     private static final int MAX_GATE_RETRIES = 3;
 
-    private final SubmissionRepository submissionRepository;
-    private final DomjudgeService domjudgeService;
+    private final UserRepository userRepository;
+    private final ProblemRepository problemRepository;
     private final ErrorClassifier errorClassifier;
     private final HintGenerator hintGenerator;
     private final HintValidator hintValidator;
@@ -43,15 +43,9 @@ public class HintService {
     private final HintLogRepository hintLogRepository;
 
     /** 힌트를 소모하지 않고 현재 남은 사용 횟수만 조회 (버튼 초기 표시/새로고침용). */
-    public HintUsageResponseDTO getRemainingUses(Long userId, Long submissionDbId) {
-        Submission submission = submissionRepository.findById(submissionDbId)
-                .orElseThrow(() -> new CustomException("제출을 찾을 수 없습니다.", "SUBMISSION_NOT_FOUND"));
-        if (submission.getUser() == null || !submission.getUser().getId().equals(userId)) {
-            throw new CustomException("본인의 제출만 조회할 수 있습니다.", "FORBIDDEN");
-        }
-
+    public HintUsageResponseDTO getRemainingUses(Long userId, Long problemId) {
         int usedCount = hintUsageRepository
-                .findByUser_IdAndProblem_Id(userId, submission.getProblem().getId())
+                .findByUser_IdAndProblem_Id(userId, problemId)
                 .map(HintUsage::getUsedCount)
                 .orElse(0);
 
@@ -61,39 +55,29 @@ public class HintService {
                 .build();
     }
 
-    public HintResponseDTO requestHint(Long userId, Long submissionDbId) {
-        Submission submission = submissionRepository.findById(submissionDbId)
-                .orElseThrow(() -> new CustomException("제출을 찾을 수 없습니다.", "SUBMISSION_NOT_FOUND"));
+    public HintResponseDTO requestHint(Long userId, Long problemId, HintRequestDTO request) {
+        if ("correct".equals(request.getResult())) {
+            throw new CustomException("정답 테스트케이스에는 힌트가 필요 없습니다.", "ALREADY_CORRECT");
+        }
 
-        if (submission.getUser() == null || !submission.getUser().getId().equals(userId)) {
-            throw new CustomException("본인의 제출에만 힌트를 요청할 수 있습니다.", "FORBIDDEN");
-        }
-        if ("AC".equals(submission.getResult())) {
-            throw new CustomException("이미 정답으로 채점된 제출입니다.", "ALREADY_ACCEPTED");
-        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", "USER_NOT_FOUND"));
+        Problem problem = problemRepository.findById(problemId)
+                .orElseThrow(() -> new CustomException("문제를 찾을 수 없습니다.", "PROBLEM_NOT_FOUND"));
 
         HintUsage usage = hintUsageRepository
-                .findByUser_IdAndProblem_Id(userId, submission.getProblem().getId())
-                .orElseGet(() -> HintUsage.builder()
-                        .user(submission.getUser())
-                        .problem(submission.getProblem())
-                        .usedCount(0)
-                        .build());
+                .findByUser_IdAndProblem_Id(userId, problemId)
+                .orElseGet(() -> HintUsage.builder().user(user).problem(problem).usedCount(0).build());
 
         if (usage.getUsedCount() >= MAX_HINT_USES_PER_PROBLEM) {
             throw new CustomException("이 문제에서 힌트를 모두 사용했습니다(최대 " + MAX_HINT_USES_PER_PROBLEM + "회).", "HINT_LIMIT_EXCEEDED");
         }
 
-        SubmissionOutputResponseDTO output = fetchOutput(submission);
-        if (output == null) {
-            throw new CustomException("아직 채점이 끝나지 않았습니다. 잠시 후 다시 시도해주세요.", "JUDGEMENT_NOT_READY");
-        }
-
-        ClassificationResult classification = errorClassifier.classify(submission.getResult(), output);
-        int repeatCount = incrementMistakeCount(submission, classification);
+        ClassificationResult classification = errorClassifier.classify(request);
+        int repeatCount = incrementMistakeCount(user, classification);
         HintTier tier = HintTier.fromRepeatCount(repeatCount);
 
-        GenerationOutcome outcome = generateWithGate(submission, classification, tier, repeatCount);
+        GenerationOutcome outcome = generateWithGate(problem, request.getTestcaseRank(), classification, tier, repeatCount);
 
         usage.setUsedCount(usage.getUsedCount() + 1);
         hintUsageRepository.save(usage);
@@ -107,20 +91,11 @@ public class HintService {
                 .build();
     }
 
-    private SubmissionOutputResponseDTO fetchOutput(Submission submission) {
-        try {
-            return domjudgeService.getResultOutput(
-                    submission.getSection().getId().toString(), submission.getSubmissionId());
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("채점 결과를 가져오는 중 오류가 발생했습니다.", e);
-        }
-    }
-
-    private int incrementMistakeCount(Submission submission, ClassificationResult classification) {
+    private int incrementMistakeCount(User user, ClassificationResult classification) {
         MistakeCategoryCount mistakeCount = mistakeCategoryCountRepository
-                .findByUser_IdAndCategory(submission.getUser().getId(), classification.getCategory())
+                .findByUser_IdAndCategory(user.getId(), classification.getCategory())
                 .orElseGet(() -> MistakeCategoryCount.builder()
-                        .user(submission.getUser())
+                        .user(user)
                         .category(classification.getCategory())
                         .count(0)
                         .build());
@@ -129,16 +104,16 @@ public class HintService {
         return mistakeCount.getCount();
     }
 
-    private GenerationOutcome generateWithGate(Submission submission, ClassificationResult classification,
+    private GenerationOutcome generateWithGate(Problem problem, Integer testcaseRank, ClassificationResult classification,
                                                 HintTier tier, int repeatCount) {
         for (int attempt = 1; attempt <= MAX_GATE_RETRIES; attempt++) {
-            String candidate = hintGenerator.generate(
-                    submission.getProblem().getDescription(), classification, tier, repeatCount);
+            String candidate = hintGenerator.generate(problem.getDescription(), classification, tier, repeatCount);
             GateResult gate = hintValidator.validate(candidate, classification);
             boolean isLastAttempt = attempt == MAX_GATE_RETRIES;
 
             hintLogRepository.save(HintLog.builder()
-                    .submission(submission)
+                    .problem(problem)
+                    .testcaseRank(testcaseRank)
                     .category(classification.getCategory())
                     .attemptNumber(attempt)
                     .accuracyGateResult(gate.isAccuracyPass() ? HintLog.GateVerdict.PASS : HintLog.GateVerdict.FAIL)
@@ -152,8 +127,8 @@ public class HintService {
             }
         }
 
-        log.warn("검증 게이트 {}회 연속 실패, 안전 템플릿으로 대체: submissionId={}, category={}",
-                MAX_GATE_RETRIES, submission.getId(), classification.getCategory());
+        log.warn("검증 게이트 {}회 연속 실패, 안전 템플릿으로 대체: problemId={}, category={}",
+                MAX_GATE_RETRIES, problem.getId(), classification.getCategory());
         return new GenerationOutcome(SafeHintTemplates.get(classification.getCategory()), true);
     }
 
