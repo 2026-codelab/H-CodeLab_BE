@@ -17,6 +17,7 @@ import com.project.handongjudge.section.service.SectionRoleService;
 import com.project.handongjudge.user.entity.Enrollment;
 import com.project.handongjudge.user.entity.User;
 import com.project.handongjudge.user.repository.EnrollmentRepository;
+import com.project.handongjudge.user.repository.UserReadStatusRepository;
 import com.project.handongjudge.user.repository.UserRepository;
 import com.project.handongjudge.domjudge.service.DomjudgeService;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,9 @@ import com.project.handongjudge.grade.repository.GradeRepository;
 import com.project.handongjudge.quiz.repository.QuizRepository;
 import com.project.handongjudge.quiz.repository.QuizGradeRepository;
 import com.project.handongjudge.quiz.repository.QuizProblemRepository;
+import com.project.handongjudge.progress.repository.CodeProgressRepository;
+import com.project.handongjudge.section.repository.ContestRepository;
+import com.project.handongjudge.submission.repository.SubmissionMetricRepository;
 import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -51,6 +55,7 @@ public class SectionService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final UserReadStatusRepository userReadStatusRepository;
     private final DomjudgeService domjudgeService;
     private final SectionRoleService sectionRoleService;
     private final AssignmentRepository assignmentRepository;
@@ -63,6 +68,9 @@ public class SectionService {
     private final QuizRepository quizRepository;
     private final QuizGradeRepository quizGradeRepository;
     private final QuizProblemRepository quizProblemRepository;
+    private final CodeProgressRepository codeProgressRepository;
+    private final ContestRepository contestRepository;
+    private final SubmissionMetricRepository submissionMetricRepository;
 
     /**
      * 교수가 자기 수업에서 코드 실행·제출을 해볼 수 있도록 DOMjudge 팀과 실습용 등록(roleInCourse=INSTRUCTOR)을 만든다.
@@ -183,17 +191,19 @@ public class SectionService {
             throw new IllegalArgumentException("해당 분반을 삭제할 권한이 없습니다");
         }
 
-        // FK 제약 회피: 해당 분반 과제를 참조하는 알림·성적 먼저 삭제
+        // FK 제약 회피: 해당 분반 과제를 참조하는 알림·성적·읽음 기록 먼저 삭제
         List<Long> assignmentIds = assignmentRepository.findAssignmentIdsBySectionId(sectionId);
         if (!assignmentIds.isEmpty()) {
             notificationRepository.deleteByAssignment_IdIn(assignmentIds);
             gradeRepository.deleteByAssignment_IdIn(assignmentIds);
+            userReadStatusRepository.deleteByAssignment_IdIn(assignmentIds);
         }
 
-        // FK 제약 회피: 해당 분반 공지를 참조하는 알림 먼저 삭제 (notice 삭제 시 notifications.notice_id FK 방지)
+        // FK 제약 회피: 해당 분반 공지를 참조하는 알림·읽음 기록 먼저 삭제 (notice 삭제 시 notifications/user_read_status.notice_id FK 방지)
         List<Long> noticeIds = noticeRepository.findNoticeIdsBySectionId(sectionId);
         if (!noticeIds.isEmpty()) {
             notificationRepository.deleteByNotice_IdIn(noticeIds);
+            userReadStatusRepository.deleteByNotice_IdIn(noticeIds);
         }
 
         // FK 제약 회피: 해당 분반 퀴즈 관련 데이터 선삭제 (quizzes.section_id FK 방지)
@@ -203,6 +213,14 @@ public class SectionService {
             quizGradeRepository.deleteByQuiz_IdIn(quizIds);
             quizRepository.deleteBySection_Id(sectionId);
         }
+
+        // FK 제약 회피: cascade 대상이 아닌 분반 참조 데이터 선삭제
+        // (질문·댓글 알림, 제출 메트릭, 코드 진행 상황, contest)
+        notificationRepository.deleteByComment_Question_Section_Id(sectionId);
+        notificationRepository.deleteByQuestion_Section_Id(sectionId);
+        submissionMetricRepository.deleteBySubmission_Section_Id(sectionId);
+        codeProgressRepository.deleteBySection_Id(sectionId);
+        contestRepository.deleteBySection_Id(sectionId);
 
         // Section 삭제 (CASCADE 설정에 따라 관련 데이터도 함께 삭제됨)
         sectionRepository.delete(section);

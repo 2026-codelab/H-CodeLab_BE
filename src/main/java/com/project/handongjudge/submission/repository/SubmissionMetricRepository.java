@@ -13,6 +13,9 @@ public interface SubmissionMetricRepository extends JpaRepository<SubmissionMetr
 
     Optional<SubmissionMetric> findBySubmission_Id(Long submissionId);
 
+    /** 분반 삭제 시 FK 제약 회피: 해당 분반 제출을 참조하는 메트릭 삭제 */
+    void deleteBySubmission_Section_Id(Long sectionId);
+
     /**
      * 비동기 결과 폴링 1회: DOMjudge 조회 시간을 judging에 누적하고 polling_attempts + 1 (단일 UPDATE로 경합 완화).
      */
