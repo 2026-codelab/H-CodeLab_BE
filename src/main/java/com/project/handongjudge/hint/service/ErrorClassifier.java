@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 public class ErrorClassifier {
 
     private static final int SUMMARY_FIELD_MAX_LEN = 300;
+    private static final int COMPILE_SUMMARY_MAX_LEN = 1000;
     private static final int CODE_MAX_LEN = 4000;
 
     /** 여러 결과가 섞여 있을 때(흔하지 않지만 가능) 대표로 삼을 우선순위. */
@@ -41,21 +42,21 @@ public class ErrorClassifier {
         String text = outputCompile == null ? "" : outputCompile;
 
         if (containsAny(text, "cannot find symbol", "undefined reference")) {
-            return new ClassificationResult(ErrorCategory.UNDECLARED_VARIABLE, truncate(text), true);
+            return new ClassificationResult(ErrorCategory.UNDECLARED_VARIABLE, truncateCompile(text), true);
         }
         if (containsAny(text, "incompatible types", "cannot convert")) {
-            return new ClassificationResult(ErrorCategory.TYPE_MISMATCH, truncate(text), true);
+            return new ClassificationResult(ErrorCategory.TYPE_MISMATCH, truncateCompile(text), true);
         }
         if (text.contains("missing return statement")) {
-            return new ClassificationResult(ErrorCategory.MISSING_RETURN, truncate(text), true);
+            return new ClassificationResult(ErrorCategory.MISSING_RETURN, truncateCompile(text), true);
         }
         if (containsAny(text, "' expected", "\" expected")) {
-            return new ClassificationResult(ErrorCategory.SYNTAX_ERROR, truncate(text), true);
+            return new ClassificationResult(ErrorCategory.SYNTAX_ERROR, truncateCompile(text), true);
         }
 
         return askLlmToClassify(
                 code,
-                "컴파일러 메시지:\n" + truncate(text),
+                "컴파일러 메시지:\n" + truncateCompile(text),
                 List.of(ErrorCategory.UNDECLARED_VARIABLE, ErrorCategory.TYPE_MISMATCH,
                         ErrorCategory.MISSING_RETURN, ErrorCategory.SYNTAX_ERROR, ErrorCategory.UNCERTAIN)
         );
@@ -263,6 +264,14 @@ public class ErrorClassifier {
             return "";
         }
         return text.length() <= SUMMARY_FIELD_MAX_LEN ? text : text.substring(0, SUMMARY_FIELD_MAX_LEN) + "...";
+    }
+
+    /** 컴파일러 메시지는 줄 번호가 뒤쪽 오류에 있을 수 있어 일반 요약보다 더 넉넉하게 자른다. */
+    private static String truncateCompile(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() <= COMPILE_SUMMARY_MAX_LEN ? text : text.substring(0, COMPILE_SUMMARY_MAX_LEN) + "...";
     }
 
     private static String truncateCode(String code) {

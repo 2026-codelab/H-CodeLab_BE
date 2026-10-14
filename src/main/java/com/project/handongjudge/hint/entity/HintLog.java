@@ -52,6 +52,11 @@ public class HintLog {
     @Column(name = "final_result", length = 10)
     private FinalResult finalResult;
 
+    /** 이번 시도에서 생성된 힌트 원문. 유출 게이트 정확도를 사람이 직접 검수하려면 텍스트가 있어야 한다. */
+    @Lob
+    @Column(name = "hint_text")
+    private String hintText;
+
     @CreationTimestamp
     @Column(name = "created_at")
     private LocalDateTime createdAt;

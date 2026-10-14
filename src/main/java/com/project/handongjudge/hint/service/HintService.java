@@ -92,7 +92,7 @@ public class HintService {
                 : null;
 
         GenerationOutcome outcome = generateWithGate(
-                request.getCode(), problem, representativeTestcaseRank, classification, tier, repeatCount);
+                request.getCode(), problem, representativeTestcaseRank, classification, tier, repeatCount, isCompileError);
 
         int remainingUses;
         if (isCompileError) {
@@ -129,9 +129,10 @@ public class HintService {
     }
 
     private GenerationOutcome generateWithGate(String code, Problem problem, Integer testcaseRank,
-                                                ClassificationResult classification, HintTier tier, int repeatCount) {
+                                                ClassificationResult classification, HintTier tier, int repeatCount,
+                                                boolean isCompileError) {
         for (int attempt = 1; attempt <= MAX_GATE_RETRIES; attempt++) {
-            String candidate = hintGenerator.generate(code, problem.getDescription(), classification, tier, repeatCount);
+            String candidate = hintGenerator.generate(code, problem.getDescription(), classification, tier, repeatCount, isCompileError);
             GateResult gate = hintValidator.validate(candidate, classification);
             boolean isLastAttempt = attempt == MAX_GATE_RETRIES;
 
@@ -144,6 +145,7 @@ public class HintService {
                     .leakGateResult(gate.isLeakPass() ? HintLog.GateVerdict.PASS : HintLog.GateVerdict.FAIL)
                     .finalResult(gate.allPass() ? HintLog.FinalResult.EXPOSED
                             : (isLastAttempt ? HintLog.FinalResult.FALLBACK : null))
+                    .hintText(candidate)
                     .build());
 
             if (gate.allPass()) {

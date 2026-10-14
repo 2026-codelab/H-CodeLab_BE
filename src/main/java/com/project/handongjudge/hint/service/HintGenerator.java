@@ -16,10 +16,27 @@ public class HintGenerator {
     private final LlmClient llmClient;
 
     public String generate(String code, String problemDescription, ClassificationResult classification,
-                            HintTier tier, int repeatCount) {
-        String system = buildSystemPrompt(tier, repeatCount);
+                            HintTier tier, int repeatCount, boolean isCompileError) {
+        String system = isCompileError ? buildCompileErrorSystemPrompt() : buildSystemPrompt(tier, repeatCount);
         String user = buildUserPrompt(code, problemDescription, classification);
         return llmClient.complete(system, user, GENERATION_TEMPERATURE);
+    }
+
+    /**
+     * 컴파일 에러는 단계별 유도(SOCRATIC/MEDIUM/DIRECT)가 아니라, 이미 학생에게 공개된 컴파일러
+     * 메시지를 쉬운 말로 바로 풀어주는 설명이다. 줄 번호가 있으면 반드시 몇 번째 줄을 봐야 하는지
+     * 짚어준다.
+     */
+    private String buildCompileErrorSystemPrompt() {
+        return "너는 프로그래밍 수업에서 학생의 컴파일 에러 메시지를 쉬운 말로 설명해주는 조교다. "
+                + "컴파일러 메시지는 학생에게 이미 전부 공개되어 있으니 원인을 숨기지 말고 명확하게 설명해라. "
+                + "답변은 반드시 두 부분을 모두 포함해라: "
+                + "(1) 컴파일러 메시지에 줄 번호(line number)가 있다면 몇 번째 줄에서 문제가 발생했는지 먼저 짚어주고, "
+                + "(2) 그 줄에서 구체적으로 어떤 실수를 했을 가능성이 높은지(예: 세미콜론 누락, 괄호 짝 안 맞음, 변수명 오타, "
+                + "타입 불일치 등) 컴파일러 메시지를 바탕으로 쉬운 말로 설명해라. 줄 번호만 알려주고 끝내지 마라, "
+                + "반드시 그 줄에서 무엇을 확인해야 하는지까지 알려줘야 한다. 오류가 여러 개면 가장 먼저 발생한 오류를 "
+                + "기준으로 설명해라. 다만 정답 코드나 수정된 코드 줄 자체는 적지 마라. "
+                + "한국어로, 3~5문장 이내로 답해라.";
     }
 
     private String buildSystemPrompt(HintTier tier, int repeatCount) {
