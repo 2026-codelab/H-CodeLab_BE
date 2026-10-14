@@ -3,8 +3,11 @@ package com.project.handongjudge.submission.controller;
 import com.project.handongjudge.submission.dto.AsyncSubmitResponseDTO;
 import com.project.handongjudge.submission.dto.SubmissionOutputResponseDTO;
 import com.project.handongjudge.submission.dto.TestSubmitResponseDTO;
+import com.project.handongjudge.testrun.TestRunStreamNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.project.handongjudge.submission.dto.SubmissionRequestDTO;
@@ -131,11 +134,18 @@ public class SubmissionController {
      *   error    — { message }
      */
     @GetMapping(value = "/test/stream/{sessionKey}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamTestOutput(
+    public ResponseEntity<SseEmitter> streamTestOutput(
             Authentication authentication,
             @PathVariable String sessionKey,
             @RequestParam Long sectionId) {
-        return submissionService.createTestOutputStream(authentication, sessionKey, sectionId);
+        try {
+            return ResponseEntity.ok(submissionService.createTestOutputStream(authentication, sessionKey, sectionId));
+        } catch (AccessDeniedException e) {
+            // 경량 실행기 작업: 본인 또는 분반 관리자가 아님
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (TestRunStreamNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
     }
 
     @GetMapping("/lastSubmitCode")

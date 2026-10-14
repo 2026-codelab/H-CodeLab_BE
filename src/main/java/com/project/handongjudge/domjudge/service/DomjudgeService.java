@@ -499,7 +499,7 @@ public class DomjudgeService {
      * (GET /api/v4/languages 기준: c, cpp, java, python3 — "python"으로 보내면
      * "Language 'python' not found or not submittable." 400이 남)
      */
-    private static String toDomjudgeLanguageId(String language) {
+    public static String toDomjudgeLanguageId(String language) {
         if ("python".equals(language)) {
             return "python3";
         }
