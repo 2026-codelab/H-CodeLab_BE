@@ -133,7 +133,7 @@ public class HintService {
                                                 boolean isCompileError) {
         for (int attempt = 1; attempt <= MAX_GATE_RETRIES; attempt++) {
             String candidate = hintGenerator.generate(code, problem.getDescription(), classification, tier, repeatCount, isCompileError);
-            GateResult gate = hintValidator.validate(candidate, classification);
+            GateResult gate = hintValidator.validate(candidate, classification, code);
             boolean isLastAttempt = attempt == MAX_GATE_RETRIES;
 
             hintLogRepository.save(HintLog.builder()
