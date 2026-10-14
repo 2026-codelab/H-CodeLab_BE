@@ -1,55 +1,33 @@
-# Multi-stage build for optimized production image
-# Stage 1: Build stage
+# 1단계: 빌드
 FROM eclipse-temurin:11-jdk-jammy AS builder
-
 WORKDIR /app
 
-# Copy Gradle wrapper and build files first (for better caching)
+# 의존성부터 받아서 캐시 (소스만 바뀌면 이 단계는 재사용)
 COPY gradlew gradlew.bat ./
 COPY gradle/ gradle/
 COPY build.gradle settings.gradle ./
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
-# Make gradlew executable
-RUN chmod +x gradlew
-
-# Download dependencies (this layer will be cached if dependencies don't change)
-RUN ./gradlew dependencies --no-daemon
-
-# Copy source code
 COPY src/ src/
-
-# Build the application
 RUN ./gradlew build --no-daemon -x test
 
-# Stage 2: Runtime stage
+# 2단계: 실행
 FROM eclipse-temurin:11-jre-jammy AS runtime
-
 WORKDIR /opt/app
 
-# Copy built JAR files from builder stage (as root first)
 COPY --from=builder /app/build/libs/ ./libs/
+RUN cp /opt/app/libs/*-SNAPSHOT.war /opt/app/app.jar && rm -rf /opt/app/libs/
 
-# Find and copy the WAR file (Spring Boot WAR can run as JAR)
-RUN ls -la /opt/app/libs/ && \
-    cp /opt/app/libs/*-SNAPSHOT.war /opt/app/app.jar && \
-    rm -rf /opt/app/libs/ && \
-    ls -la /opt/app/
-
-# Create non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-# Change ownership to non-root user AFTER copying files
-RUN chown -R appuser:appuser /opt/app && ls -la /opt/app/
-
-# Switch to non-root user
+# root가 아닌 사용자로 실행 + 로그 폴더 권한
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && mkdir -p /var/log/handongjudge \
+    && chown -R appuser:appuser /opt/app /var/log/handongjudge
 USER appuser
 
-# Expose the port
+ENV TZ=Asia/Seoul
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+HEALTHCHECK --interval=15s --timeout=3s --start-period=90s --retries=5 \
+    CMD curl -fs http://localhost:8080/actuator/health || exit 1
 
-# Run the application with JVM optimizations
 CMD ["java", "-Djava.security.egd=file:/dev/./urandom", "-Dspring.profiles.active=deploy", "-jar", "/opt/app/app.jar"]

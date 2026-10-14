@@ -1,0 +1,9 @@
+.git
+.gradle
+.idea
+.cursor
+build
+tmp
+.env
+*.md
+.DS_Store
