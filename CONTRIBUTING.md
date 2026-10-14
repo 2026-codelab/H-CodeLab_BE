@@ -22,8 +22,8 @@ H-CodeLab 백엔드 팀이 함께 지키는 규칙입니다.
 ## 1. 한눈에 보는 작업 흐름
 
 ```
-이슈 생성  →  브랜치 생성  →  작업 & 커밋  →  PR 생성  →  코드 리뷰  →  master 머지  →  deploy-hj 반영
-  (#12)     feat/#12-submit-api  feat: ... (#12)               승인 1명↑      Squash merge
+이슈 생성  →  브랜치 생성  →  작업 & 커밋  →  PR 생성  →  코드 리뷰  →  master 머지  →  Jenkins 자동 배포
+  (#12)     feat/#12-submit-api  feat: ... (#12)               승인 1명↑      Squash merge     (3분 이내)
 ```
 
 1. 작업 전 **이슈를 먼저 만듭니다.**
@@ -31,6 +31,7 @@ H-CodeLab 백엔드 팀이 함께 지키는 규칙입니다.
 3. 작업 후 규칙에 맞춰 **커밋**하고 원격에 push 합니다.
 4. `master`를 대상으로 **PR을 생성**합니다.
 5. **승인** 후 머지하고, 작업 브랜치는 삭제합니다(자동).
+6. 머지되면 Jenkins가 **운영 서버에 자동 배포**합니다. ([10. 배포](#10-배포) 참고)
 
 ---
 
@@ -40,8 +41,7 @@ H-CodeLab 백엔드 팀이 함께 지키는 규칙입니다.
 
 | 브랜치 | 역할 | 직접 push |
 |---|---|:---:|
-| `master` | 개발 통합 브랜치. 항상 빌드 가능한 상태를 유지 | ❌ |
-| `deploy-hj` | **운영 배포 브랜치.** push 시 자동 배포됨 | ❌ |
+| `master` | 개발 통합 + **운영 배포 브랜치.** 머지되면 자동 배포되므로 항상 배포 가능한 상태를 유지 | ❌ |
 | `타입/#이슈번호-설명` | 개인 작업 브랜치 | ✅ |
 
 ### 작업 브랜치 이름
@@ -241,12 +241,36 @@ com.project.handongjudge
 - `application-*.yml`에 비밀번호, 토큰 등 **민감한 값을 직접 쓰지 않고** 환경변수로 참조합니다.
 - 실제 값은 **팀 메신저 등 저장소 밖의 안전한 채널**로 공유합니다.
 - 새로운 환경변수를 추가했다면 팀원에게 **꼭 공유**해 주세요.
-- 배포에 필요한 값(서버 주소, SSH 키 등)은 **GitHub Secrets**에서 관리합니다.
+- 운영 서버의 실제 값은 서버의 `/home/codelab/hcl/.env`에서 관리합니다. (GitHub Secrets는 사용하지 않음)
+- 새 환경변수를 추가했다면 **머지 전에** 운영 서버에도 반영해야 합니다. 빠뜨리면 배포 후 서버가 뜨지 않습니다.
+  1. [H-CodeLab_Deploy](https://github.com/2026-codelab/H-CodeLab_Deploy)의 `docker-compose.yml` → `backend.environment`와 `.env.example`에 추가 (PR)
+  2. 서버의 `/home/codelab/hcl/.env`에 실제 값 추가
 
 ---
 
 ## 10. 배포
 
-- `deploy-hj` 브랜치에 push 되면 GitHub Actions(`deploy-backend.yml`)가 **자동으로 배포**합니다.
-- 따라서 `deploy-hj` 브랜치에는 **직접 push하지 않고**, 팀원과 합의 후 `master` → `deploy-hj`로 반영합니다.
-- 배포 후에는 서버 로그와 주요 API가 **정상 동작하는지 확인**합니다.
+운영 서버(`ai.walab.info`)에 Docker Compose로 배포하며, CI/CD는 서버의 **Jenkins**가 담당합니다. 서버 구성과 설정 파일은 [H-CodeLab_Deploy](https://github.com/2026-codelab/H-CodeLab_Deploy) 레포에 있습니다.
+
+### 자동 배포 흐름
+
+```
+master 머지  →  Jenkins가 변경 감지 (3분마다 확인)  →  Docker 이미지 빌드  →  backend 컨테이너 교체  →  헬스체크
+                                                                                         └ 실패 시 직전 버전으로 자동 되돌림
+```
+
+- **`master`에 머지되면 3분 안에 운영 서버에 반영됩니다.** 따라서 `master`에는 배포해도 되는 코드만 머지합니다.
+- 헬스체크(`/actuator/health`)가 3분 안에 `UP`이 되지 않으면 Jenkins가 직전 버전으로 되돌립니다.
+- 별도의 배포 브랜치(`deploy-hj` 등)와 GitHub Actions는 더 이상 사용하지 않습니다.
+
+### 배포 후 확인
+
+- Jenkins `hcl-backend` 작업이 성공(초록색)했는지 확인합니다.
+- 서비스에 접속해 변경한 기능과 로그인·제출 등 주요 기능이 **정상 동작하는지 확인**합니다.
+- Jenkins와 DOMjudge 관리자 화면은 외부에 열려 있지 않아 **SSH 터널**로 접속합니다.
+
+### 주의할 점
+
+- 테이블 구조를 바꾸는 변경(컬럼 이름 변경·삭제 등)은 `ddl-auto: update`가 반영하지 않으므로, 머지 전에 팀원과 적용 방법을 합의합니다. ([8. DB 변경 규칙](#8-db-변경-규칙))
+- 시험·과제 마감 시간에는 배포를 피합니다. backend가 교체되는 1~2분 동안 API가 잠시 끊길 수 있습니다.
+- 문제가 생겨 이전 버전으로 되돌려야 하면 `master`에서 해당 커밋을 revert하는 PR을 올립니다. 급할 때 서버에서 직접 되돌리는 방법은 배포 매뉴얼의 "운영 명령어 모음"을 참고합니다.
