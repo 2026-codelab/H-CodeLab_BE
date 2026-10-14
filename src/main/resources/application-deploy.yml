@@ -1,5 +1,5 @@
 # ===== 배포 환경 (SPRING_PROFILES_ACTIVE=deploy) =====
-# 서버마다 달라지는 값은 환경변수(서버의 /srv/hcl/.env)에서 읽는다.
+# 서버마다 달라지는 값은 환경변수(서버의 /home/codelab/hcl/.env)에서 읽는다.
 
 spring:
   jpa:

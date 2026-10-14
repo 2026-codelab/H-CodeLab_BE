@@ -241,10 +241,10 @@ com.project.handongjudge
 - `application-*.yml`에 비밀번호, 토큰 등 **민감한 값을 직접 쓰지 않고** 환경변수로 참조합니다.
 - 실제 값은 **팀 메신저 등 저장소 밖의 안전한 채널**로 공유합니다.
 - 새로운 환경변수를 추가했다면 팀원에게 **꼭 공유**해 주세요.
-- 운영 서버의 실제 값은 서버의 `/srv/hcl/.env`에서 관리합니다. (GitHub Secrets는 사용하지 않음)
+- 운영 서버의 실제 값은 서버의 `/home/codelab/hcl/.env`에서 관리합니다. (GitHub Secrets는 사용하지 않음)
 - 새 환경변수를 추가했다면 **머지 전에** 운영 서버에도 반영해야 합니다. 빠뜨리면 배포 후 서버가 뜨지 않습니다.
   1. [H-CodeLab_Deploy](https://github.com/2026-codelab/H-CodeLab_Deploy)의 `docker-compose.yml` → `backend.environment`와 `.env.example`에 추가 (PR)
-  2. 서버의 `/srv/hcl/.env`에 실제 값 추가
+  2. 서버의 `/home/codelab/hcl/.env`에 실제 값 추가
 
 ---
 
