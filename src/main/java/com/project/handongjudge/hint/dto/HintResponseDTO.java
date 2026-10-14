@@ -9,6 +9,6 @@ public class HintResponseDTO {
     private String hint;
     private String category;
     private String tier;
-    private int remainingUses;
+    private int usedCount;
     private boolean usedFallback;
 }

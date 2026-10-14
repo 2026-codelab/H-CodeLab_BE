@@ -6,6 +6,5 @@ import lombok.Getter;
 @Getter
 @Builder
 public class HintUsageResponseDTO {
-    private int remainingUses;
-    private int maxUses;
+    private int usedCount;
 }

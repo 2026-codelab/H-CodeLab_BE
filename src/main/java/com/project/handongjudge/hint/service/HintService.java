@@ -25,16 +25,14 @@ import org.springframework.util.StringUtils;
  * "테스트하기"는 Submission을 DB에 저장하지 않으므로, problemId + HintRequestDTO(학생 코드 +
  * 컴파일 메시지 또는 실패한 테스트케이스 전체)를 받아 바로 분류·생성·검증한다.
  *
- * 컴파일 에러(outputCompile 존재)는 힌트 사용 횟수를 소모하지 않는다 — 컴파일러 메시지는 이미
- * 학생에게 전부 공개되어 있어 "유출"의 의미가 없고, 단순히 그 메시지를 쉬운 말로 풀어주는 것뿐이라
- * 3회 제한의 대상인 "코드 로직에 대한 힌트"와는 성격이 다르기 때문.
+ * 힌트 사용 횟수는 제한하지 않는다(사용자 피드백 반영) — HintUsage.usedCount는 통계/이력 용도로만
+ * 계속 기록한다.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class HintService {
 
-    private static final int MAX_HINT_USES_PER_PROBLEM = 3;
     private static final int MAX_GATE_RETRIES = 3;
 
     private final UserRepository userRepository;
@@ -46,7 +44,7 @@ public class HintService {
     private final MistakeCategoryCountRepository mistakeCategoryCountRepository;
     private final HintLogRepository hintLogRepository;
 
-    /** 힌트를 소모하지 않고 현재 남은 사용 횟수만 조회 (버튼 초기 표시/새로고침용). */
+    /** 힌트를 소모하지 않고 지금까지 사용한 횟수만 조회 (버튼 초기 표시/새로고침용). */
     public HintUsageResponseDTO getRemainingUses(Long userId, Long problemId) {
         int usedCount = hintUsageRepository
                 .findByUser_IdAndProblem_Id(userId, problemId)
@@ -54,8 +52,7 @@ public class HintService {
                 .orElse(0);
 
         return HintUsageResponseDTO.builder()
-                .remainingUses(MAX_HINT_USES_PER_PROBLEM - usedCount)
-                .maxUses(MAX_HINT_USES_PER_PROBLEM)
+                .usedCount(usedCount)
                 .build();
     }
 
@@ -75,9 +72,6 @@ public class HintService {
             usage = hintUsageRepository
                     .findByUser_IdAndProblem_Id(userId, problemId)
                     .orElseGet(() -> HintUsage.builder().user(user).problem(problem).usedCount(0).build());
-            if (usage.getUsedCount() >= MAX_HINT_USES_PER_PROBLEM) {
-                throw new CustomException("이 문제에서 힌트를 모두 사용했습니다(최대 " + MAX_HINT_USES_PER_PROBLEM + "회).", "HINT_LIMIT_EXCEEDED");
-            }
         }
 
         ClassificationResult classification = isCompileError
@@ -94,23 +88,23 @@ public class HintService {
         GenerationOutcome outcome = generateWithGate(
                 request.getCode(), problem, representativeTestcaseRank, classification, tier, repeatCount, isCompileError);
 
-        int remainingUses;
+        int usedCount;
         if (isCompileError) {
-            remainingUses = MAX_HINT_USES_PER_PROBLEM - hintUsageRepository
+            usedCount = hintUsageRepository
                     .findByUser_IdAndProblem_Id(userId, problemId)
                     .map(HintUsage::getUsedCount)
                     .orElse(0);
         } else {
             usage.setUsedCount(usage.getUsedCount() + 1);
             hintUsageRepository.save(usage);
-            remainingUses = MAX_HINT_USES_PER_PROBLEM - usage.getUsedCount();
+            usedCount = usage.getUsedCount();
         }
 
         return HintResponseDTO.builder()
                 .hint(outcome.hint)
                 .category(classification.getCategory().name())
                 .tier(tier.name())
-                .remainingUses(remainingUses)
+                .usedCount(usedCount)
                 .usedFallback(outcome.usedFallback)
                 .build();
     }
