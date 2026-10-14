@@ -19,7 +19,7 @@
 
 H-CodeLab의 **Backend API 서버**이다. Spring Boot 기반으로 수업·과제·코딩 테스트·커뮤니티 등 핵심 비즈니스 로직을 제공하며, **DOMjudge**와 연동해 코드 제출 및 자동 채점을 처리한다.
 
-[Frontend Repository](https://github.com/walab-Capstone1/Handongjudge_FE)
+[Frontend Repository](https://github.com/2026-codelab/H-CodeLab_FE) · [Deploy Repository](https://github.com/2026-codelab/H-CodeLab_Deploy)
 
 ## 핵심 기능
 
@@ -37,7 +37,7 @@ H-CodeLab의 **Backend API 서버**이다. Spring Boot 기반으로 수업·과�
   <img src="./docs/HCL%20architecture.jpg" width="900" alt="H-CodeLab 시스템 아키텍처"/>
 </p>
 
-React Frontend → Nginx → Spring Boot API → MariaDB / Redis / DOMjudge(Judgehost) 구조로 구성되어 있으며, GitHub Actions + Jenkins를 통해 Blue/Green 배포를 수행한다.
+React Frontend → Nginx → Spring Boot API → MariaDB / Redis / DOMjudge(Judgehost) 구조로 구성되어 있으며, 모든 구성 요소를 한 서버에 Docker Compose로 배포한다. 서버의 Jenkins가 `master` 변경을 감지해 자동으로 빌드·배포한다.
 
 ## 개발 기간
 
@@ -45,8 +45,10 @@ React Frontend → Nginx → Spring Boot API → MariaDB / Redis / DOMjudge(Judg
 
 ## 배포 주소
 
-- API: [`https://hcl.walab.info/api`](https://hcl.walab.info/api)
-- 서비스: [`https://hcl.walab.info`](https://hcl.walab.info)
+- 서비스: [`http://ai.walab.info`](http://ai.walab.info)
+- API: `http://ai.walab.info/api`
+
+> HTTPS 적용 후 주소가 바뀔 수 있습니다.
 
 ## 개발자
 
@@ -97,8 +99,8 @@ React Frontend → Nginx → Spring Boot API → MariaDB / Redis / DOMjudge(Judg
 ### 설치 및 실행
 
 ```bash
-git clone https://github.com/walab-Capstone1/Handongjudge_BE.git
-cd Handongjudge_BE
+git clone https://github.com/2026-codelab/H-CodeLab_BE.git
+cd H-CodeLab_BE
 # .env 파일 설정 (아래 참고)
 ./gradlew bootRun
 ```
@@ -241,14 +243,15 @@ REACT_APP_API_URL=http://localhost:8080/api
 
 ### Deploy
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
+![Jenkins](https://img.shields.io/badge/Jenkins-D24939?style=for-the-badge&logo=jenkins&logoColor=white)
+![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
 
 ---
 
 # 디렉토리 구조
 
 ```text
-📁 Handongjudge_BE
+📁 H-CodeLab_BE
 ├── 📁 src/main/java/com/project/handongjudge
 │   ├── 📁 auth/           # JWT, OAuth2, Security
 │   ├── 📁 user/           # 사용자, 수강생 관리
@@ -272,7 +275,7 @@ REACT_APP_API_URL=http://localhost:8080/api
 │   ├── application-local.yml
 │   └── application-deploy.yml
 ├── 🐳 Dockerfile-backend
-├── ⚙️ .github/workflows/deploy-backend.yml
+├── 🐳 .dockerignore
 └── 📦 build.gradle
 ```
 
@@ -295,11 +298,19 @@ REACT_APP_API_URL=http://localhost:8080/api
 ### Docker
 
 ```bash
-docker build -f Dockerfile-backend -t handongjudge-be .
+docker build -f Dockerfile-backend -t hcl-backend .
 ```
+
+이미지는 `deploy` 프로필로 실행되며, 필요한 환경변수는 [H-CodeLab_Deploy](https://github.com/2026-codelab/H-CodeLab_Deploy)의 `docker-compose.yml`(`backend.environment`)과 `.env.example`에 정리되어 있습니다.
 
 ### CI/CD
 
-`deploy-hj`,`deploy` 브랜치 push 시 GitHub Actions가 서버에 SSH 접속 후 Docker Compose로 Backend를 재배포합니다.
+`master`에 머지되면 운영 서버의 Jenkins(`hcl-backend` 작업)가 3분 안에 변경을 감지해 배포합니다.
+
+1. Docker 이미지 빌드 (커밋 해시로 태그)
+2. `backend` 컨테이너 교체
+3. 헬스체크(`/actuator/health`) 확인. 3분 안에 `UP`이 되지 않으면 직전 버전으로 자동 되돌림
+
+파이프라인 정의(`jenkins/Jenkinsfile.backend`)와 서버 구성은 [H-CodeLab_Deploy](https://github.com/2026-codelab/H-CodeLab_Deploy)에서 관리합니다. 자세한 규칙은 [CONTRIBUTING.md](./CONTRIBUTING.md#10-배포)를 참고하세요.
 
 ---
