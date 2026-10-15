@@ -125,5 +125,18 @@ public class SystemAdminService {
     public long getTotalSubmissionsCount() {
         return submissionRepository.count();
     }
+
+    /**
+     * 시스템 관리자용 사용자 역할 수정
+     */
+    @Transactional
+    public UserDto updateUserRole(Long userId, User.Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + userId));
+        user.setRole(newRole);
+        User saved = userRepository.save(user);
+        log.info("사용자 역할 변경 완료 - userId: {}, newRole: {}", userId, newRole);
+        return UserDto.from(saved);
+    }
 }
 
