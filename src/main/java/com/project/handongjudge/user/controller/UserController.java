@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,13 @@ public class UserController {
      */
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
+        // 비로그인(또는 토큰이 아직 안 붙은) 요청은 authentication이 null이거나 익명이라,
+        // 바로 authentication.getName()을 부르면 NPE가 나서 엉뚱한 400으로 응답되던 문제가 있었음.
+        // getDashboardCourses()의 가드와 동일한 조건으로 체크하되, 여기선 명확하게 401로 응답한다.
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getPrincipal() == null || "anonymousUser".equals(authentication.getName())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
         String identifier = authentication.getName();
         UserDto user;
 
