@@ -142,6 +142,59 @@ public class SystemAdminController {
     }
 
     /**
+     * 시스템 관리자용 사용자 역할 수정
+     */
+    @PatchMapping("/users/{userId}/role")
+    public ResponseEntity<Map<String, Object>> updateUserRole(
+            Authentication authentication,
+            @PathVariable Long userId,
+            @RequestBody com.project.handongjudge.systemadmin.dto.UpdateUserRoleRequest request) {
+        try {
+            if (authentication == null || authentication.getName() == null) {
+                log.error("인증 정보가 없습니다.");
+                return buildErrorResponse("인증이 필요합니다.");
+            }
+
+            Long adminId = Long.parseLong(authentication.getName());
+            User admin = userRepository.findById(adminId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // SUPER_ADMIN 권한 확인
+            if (admin.getRole() != User.Role.SUPER_ADMIN) {
+                log.warn("시스템 관리자 권한이 없는 사용자의 역할 변경 시도 - userId: {}, role: {}", adminId, admin.getRole());
+                return buildErrorResponse("시스템 관리자 권한이 필요합니다.");
+            }
+
+            // 본인 역할은 본인이 바꾸지 못하도록 막음 (실수로 권한을 잃어버리는 것 방지)
+            if (adminId.equals(userId)) {
+                return buildErrorResponse("본인의 역할은 변경할 수 없습니다.");
+            }
+
+            User.Role newRole;
+            try {
+                newRole = User.Role.valueOf(request.getRole());
+            } catch (IllegalArgumentException | NullPointerException e) {
+                return buildErrorResponse("유효하지 않은 역할입니다: " + request.getRole());
+            }
+
+            com.project.handongjudge.user.dto.UserDto updated =
+                    systemAdminService.updateUserRole(userId, newRole);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "사용자 역할 변경 성공");
+            response.put("data", updated);
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            return buildErrorResponse(e.getMessage());
+        } catch (Exception e) {
+            log.error("사용자 역할 변경 실패: {}", authentication != null ? authentication.getName() : "null", e);
+            return buildErrorResponse("사용자 역할을 변경하지 못했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
      * 시스템 관리자용 모든 제출 레코드 조회
      */
     @GetMapping("/submissions")
