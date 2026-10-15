@@ -72,6 +72,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/**", "/oauth2/**", "/h2-console/**").permitAll()
                 .antMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .antMatchers("/actuator/health").permitAll()
+                // 서비스 간 호출(테스트하기 실행기). JWT 대신 InternalTokenFilter가 X-Internal-Token으로 막는다.
+                .antMatchers("/internal/**").permitAll()
                 .anyRequest().authenticated()
                 .and()
                 .oauth2Login()

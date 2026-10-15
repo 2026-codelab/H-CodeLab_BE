@@ -92,6 +92,14 @@ llm:
   api-key: ${LLM_API_KEY}
   model: ${LLM_MODEL:gpt-4o-mini}
 
+# 테스트하기 경량 실행기 (H-CodeLab_TestRun). 기본값은 기존 DOMjudge 경로라 환경변수가 없어도 동작이 바뀌지 않는다.
+testrun:
+  executor: ${TESTRUN_EXECUTOR:domjudge}            # domjudge | runner
+  runner-sections: ${TESTRUN_RUNNER_SECTIONS:}      # executor=domjudge여도 실행기를 쓸 분반 ID (쉼표 구분)
+  service-url: ${TESTRUN_SERVICE_URL:http://testrun-service:8090}
+  service-token: ${TESTRUN_SERVICE_TOKEN:}          # 비어 있으면 실행기를 쓰지 않음
+  internal-token: ${TESTRUN_INTERNAL_TOKEN:}        # 비어 있으면 /internal/** 전부 거부
+
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   password-reset:

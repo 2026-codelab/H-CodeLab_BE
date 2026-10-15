@@ -76,7 +76,7 @@ public class QuizSubmissionController {
             Authentication authentication,
             @RequestBody SubmissionAuthDTO request
     ) {
-        TestSubmitResponseDTO result = submissionService.submitCodeForTestAsync(authentication, request);
+        TestSubmitResponseDTO result = submissionService.submitCodeForTestAsync(authentication, request, true);
         return ResponseEntity.ok(result);
     }
 }

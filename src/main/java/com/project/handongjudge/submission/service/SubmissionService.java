@@ -56,6 +56,13 @@ import com.project.handongjudge.domjudge.service.DomjudgeService;
 import com.project.handongjudge.grade.service.GradeService;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import com.project.handongjudge.testrun.TestRunEventRelay;
+import com.project.handongjudge.testrun.TestRunKeys;
+import com.project.handongjudge.testrun.TestRunProperties;
+import com.project.handongjudge.testrun.TestRunRouter;
+import com.project.handongjudge.testrun.TestRunStreamNotFoundException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -90,6 +97,10 @@ public class SubmissionService {
     private final SubmissionPollingTask submissionPollingTask;
     private final TestOutputSseService testOutputSseService;
     private final TestOutputPollingTask testOutputPollingTask;
+    private final TestRunRouter testRunRouter;
+    private final TestRunProperties testRunProperties;
+    private final TestRunEventRelay testRunEventRelay;
+    private final StringRedisTemplate redisTemplate;
 
     private void maybeClearAssignmentRejectIfAc(Submission submission) {
         if (submission == null || submission.getResult() == null) {
@@ -1235,11 +1246,22 @@ public class SubmissionService {
     // =========================================================================
 
     /**
-     * 테스트하기 비동기 제출: DOMjudge에만 제출하고 sessionKey(= domjudgeSubmissionId)를 반환.
-     * DB에 Submission을 저장하지 않으며, 클라이언트는
+     * 과제 테스트하기 비동기 제출. sessionKey를 반환하고, 클라이언트는
      * GET /api/submissions/test/stream/{sessionKey} 로 SSE 연결해 output 결과를 수신한다.
      */
     public TestSubmitResponseDTO submitCodeForTestAsync(Authentication authentication, SubmissionAuthDTO dto) {
+        return submitCodeForTestAsync(authentication, dto, false);
+    }
+
+    /**
+     * 테스트하기 비동기 제출.
+     * 경량 실행기를 쓰도록 설정된 분반이면 testrun-service에 보내고 sessionKey = 작업 ID(UUID)를 반환한다.
+     * 실행기를 쓸 수 없으면(설정 꺼짐, 워커 없음, 서비스 장애) 기존처럼 DOMjudge에 제출하고 sessionKey = 제출 번호를 반환한다.
+     * 어느 경로든 H-CodeLab DB의 submissions에는 저장하지 않는다.
+     *
+     * @param quiz 코딩테스트(퀴즈) 화면에서 온 요청이면 true. 정식 제출과 같은 퀴즈 언어 검증을 적용한다.
+     */
+    public TestSubmitResponseDTO submitCodeForTestAsync(Authentication authentication, SubmissionAuthDTO dto, boolean quiz) {
         Long userId = Long.parseLong(authentication.getName());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -1249,8 +1271,11 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Section not found"));
         // 수업에서 정한 언어로만 제출 가능
         section.validateSubmissionLanguage(dto.getLanguage());
+        if (quiz) {
+            validateQuizLanguage(dto.getLanguage());
+        }
 
-        validateSubmission(dto.getProblemId(), dto.getSectionId(), userId);
+        SubmissionContext context = validateSubmission(dto.getProblemId(), dto.getSectionId(), userId);
 
         String contestId = String.valueOf(section.getId());
         String teamId = enrollmentRepository.findTeamIdByUserIdAndSectionId(user.getId(), section.getId());
@@ -1258,6 +1283,22 @@ public class SubmissionService {
 
         if (teamId == null || teamId.isEmpty()) {
             throw new RuntimeException("현재 수업에 수강신청되어 있지 않습니다. 수강 신청 후 제출해 주세요.");
+        }
+
+        // 경량 실행기 (설계 문서 TESTRUN_EXECUTOR_DESIGN.md 3단계). 비어 있으면 DOMjudge 경로로 폴백.
+        boolean asQuiz = quiz ? context.quizId != null : context.assignmentId == null;
+        java.util.Optional<String> jobId = testRunRouter.submit(userId, section.getId(), problem,
+                DomjudgeService.toDomjudgeLanguageId(dto.getLanguage()), dto.getCodeString(),
+                new TestRunRouter.Context(asQuiz ? "QUIZ" : "ASSIGNMENT",
+                        asQuiz ? context.quizId : context.assignmentId, context.manager));
+        if (jobId.isPresent()) {
+            return TestSubmitResponseDTO.builder()
+                    .sessionKey(jobId.get())
+                    .sectionId(section.getId())
+                    .problemId(problem.getId())
+                    .language(dto.getLanguage())
+                    .submittedAt(java.time.LocalDateTime.now(KST_ZONE))
+                    .build();
         }
 
         File codeFile = CodeExtenstion.StringToFile(dto.getLanguage(), dto.getCodeString());
@@ -1288,7 +1329,26 @@ public class SubmissionService {
      * 인증 확인 후 emitter를 등록하고 @Async 폴링 태스크를 시작한다.
      */
     public SseEmitter createTestOutputStream(Authentication authentication, String sessionKey, Long sectionId) {
-        Long.parseLong(authentication.getName()); // 인증 확인 (파싱 실패 시 예외)
+        Long userId = Long.parseLong(authentication.getName()); // 인증 확인 (파싱 실패 시 예외)
+
+        if (TestRunKeys.isJobId(sessionKey)) {
+            // 경량 실행기 작업: 본인 또는 그 분반 관리자만 결과를 볼 수 있다.
+            java.util.Map<Object, Object> meta = redisTemplate.opsForHash().entries(TestRunKeys.jobMeta(sessionKey));
+            if (meta == null || meta.isEmpty()) {
+                throw new TestRunStreamNotFoundException(sessionKey);
+            }
+            Long ownerId = Long.valueOf(String.valueOf(meta.get("userId")));
+            Long jobSectionId = Long.valueOf(String.valueOf(meta.get("sectionId")));
+            if (!userId.equals(ownerId) && !sectionRoleService.isManager(userId, jobSectionId)) {
+                log.warn("[TESTRUN] stream access denied job={} user={} owner={}", sessionKey, userId, ownerId);
+                throw new AccessDeniedException("다른 사용자의 테스트 결과입니다.");
+            }
+            SseEmitter emitter = testOutputSseService.register(sessionKey, testRunProperties.getStreamTimeoutMs());
+            testRunEventRelay.watch(sessionKey, testRunProperties.getStreamTimeoutMs());
+            log.info("[TESTRUN] stream created job={} user={}", sessionKey, userId);
+            return emitter;
+        }
+
         SseEmitter emitter = testOutputSseService.register(sessionKey);
         testOutputPollingTask.pollAndStream(sessionKey, String.valueOf(sectionId));
         log.info("[TEST-SSE] stream created sessionKey={}", sessionKey);
@@ -1308,9 +1368,18 @@ public class SubmissionService {
      * - 학생은 퀴즈 상태가 PAUSED·ENDED이거나 종료 시각이 지나면 제출 불가
      * - 관리자/튜터는 퀴즈 종료 후에도 제출 가능 (과제는 마감일 체크)
      */
-    private void validateSubmission(Long problemId, Long sectionId, Long userId) {
+    /** 검증을 통과한 제출의 문맥. 테스트하기 통계에서 과제/코딩테스트를 구분하는 데 쓴다. */
+    private static class SubmissionContext {
+        Long assignmentId;
+        Long quizId;
+        boolean manager;
+    }
+
+    private SubmissionContext validateSubmission(Long problemId, Long sectionId, Long userId) {
+        SubmissionContext context = new SubmissionContext();
         // 관리자인지 확인
         boolean isManager = sectionRoleService.isManager(userId, sectionId);
+        context.manager = isManager;
         
         // 섹션 기준으로 매핑을 조회해 문제-분반 연결 검증을 안정화
         List<AssignmentProblem> assignmentProblems =
@@ -1345,6 +1414,7 @@ public class SubmissionService {
                 }
                 // 마감일 지나도 제출 허용 → 지각 제출로 처리 (isOnTime=false, 성적 화면에서 △ 표시)
                 assignmentValid = true;
+                context.assignmentId = targetAssignment.getId();
             }
         }
         
@@ -1358,6 +1428,7 @@ public class SubmissionService {
             if (!quizzesInSection.isEmpty()) {
                 if (isManager) {
                     quizValid = true;
+                    context.quizId = quizzesInSection.get(0).getId();
                 } else {
                     boolean hasActiveQuiz = false;
                     boolean hasRunningOrWaitingQuiz = false;
@@ -1379,6 +1450,7 @@ public class SubmissionService {
                         if (quiz.getEndTime() == null || !now.isAfter(quiz.getEndTime())) {
                             quizValid = true;
                             hasRunningOrWaitingQuiz = true;
+                            context.quizId = quiz.getId();
                             break;
                         }
                     }
@@ -1404,6 +1476,7 @@ public class SubmissionService {
         if (!assignmentValid && !quizValid) {
             throw new IllegalArgumentException("해당 문제는 이 분반의 과제나 코딩 테스트에 속해있지 않습니다");
         }
+        return context;
     }
 
 }

@@ -28,24 +28,42 @@ public class TestOutputSseService {
     // -------------------------------------------------------------------------
 
     public SseEmitter register(String sessionKey) {
-        SseEmitter emitter = new SseEmitter(SSE_EMITTER_TIMEOUT_MS);
+        return register(sessionKey, SSE_EMITTER_TIMEOUT_MS);
+    }
 
+    public SseEmitter register(String sessionKey, long timeoutMs) {
+        SseEmitter emitter = new SseEmitter(timeoutMs);
+
+        // 콜백은 자기 자신일 때만 지운다. 같은 키로 다시 연결했을 때 이전 연결의 종료가 새 연결을 지우지 않게.
         emitter.onTimeout(() -> {
             log.debug("[TEST-SSE] timeout sessionKey={}", sessionKey);
-            emitters.remove(sessionKey);
+            emitters.remove(sessionKey, emitter);
         });
         emitter.onCompletion(() -> {
             log.debug("[TEST-SSE] completed sessionKey={}", sessionKey);
-            emitters.remove(sessionKey);
+            emitters.remove(sessionKey, emitter);
         });
         emitter.onError(e -> {
             log.debug("[TEST-SSE] error sessionKey={}: {}", sessionKey, e.getMessage());
-            emitters.remove(sessionKey);
+            emitters.remove(sessionKey, emitter);
         });
 
-        emitters.put(sessionKey, emitter);
+        SseEmitter previous = emitters.put(sessionKey, emitter);
+        if (previous != null) {
+            // 같은 키로 다시 연결하면 이전 연결은 닫는다.
+            try {
+                previous.complete();
+            } catch (Exception e) {
+                log.debug("[TEST-SSE] previous emitter complete failed sessionKey={}: {}", sessionKey, e.getMessage());
+            }
+        }
         log.debug("[TEST-SSE] registered sessionKey={} total={}", sessionKey, emitters.size());
         return emitter;
+    }
+
+    /** 이 키로 열린 연결이 있는지. 테스트하기 실행기 이벤트 중계에서 끊긴 연결을 정리할 때 쓴다. */
+    public boolean isActive(String sessionKey) {
+        return emitters.containsKey(sessionKey);
     }
 
     public void complete(String sessionKey) {
@@ -108,6 +126,26 @@ public class TestOutputSseService {
         send(sessionKey, "error", Map.of("message", message));
     }
 
+    /**
+     * 테스트하기 실행기(testrun-runner)가 Redis에 기록한 이벤트를 변환 없이 그대로 보낸다.
+     * 이벤트 이름과 data(JSON)는 위 send* 메서드와 같은 계약이다.
+     */
+    public void sendRaw(String sessionKey, String eventName, String jsonData) {
+        SseEmitter emitter = emitters.get(sessionKey);
+        if (emitter == null) {
+            log.debug("[TEST-SSE] no emitter sessionKey={} event={}", sessionKey, eventName);
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(eventName)
+                    .data(jsonData, MediaType.APPLICATION_JSON));
+        } catch (Exception e) {
+            log.warn("[TEST-SSE] send failed event={} sessionKey={}: {}", eventName, sessionKey, e.getMessage());
+            emitters.remove(sessionKey, emitter);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // 내부 유틸
     // -------------------------------------------------------------------------
@@ -126,7 +164,7 @@ public class TestOutputSseService {
             log.debug("[TEST-SSE] sent event={} sessionKey={}", eventName, sessionKey);
         } catch (Exception e) {
             log.warn("[TEST-SSE] send failed event={} sessionKey={}: {}", eventName, sessionKey, e.getMessage());
-            emitters.remove(sessionKey);
+            emitters.remove(sessionKey, emitter);
         }
     }
 }
