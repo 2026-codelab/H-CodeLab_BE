@@ -31,7 +31,6 @@ public class GlobalExceptionHandler {
         // ResponseStatusException은 RuntimeException의 하위 타입이라, 이 핸들러가 없으면
         // 아래 handleRuntimeException(400 고정)에 걸려 컨트롤러가 지정한 상태 코드(예: 401)가
         // 무시되고 항상 400으로 응답이 나가버림. 반드시 RuntimeException 핸들러보다 먼저 잡아야 함.
-        // (#20 / H-CodeLab_FE#35 에서 처음 발견 - 같은 수정이 #25에도 독립적으로 필요해 함께 포함함)
         log.warn("Response status exception: {}", e.getMessage());
         Map<String, Object> response = new HashMap<>();
         response.put("success", false);

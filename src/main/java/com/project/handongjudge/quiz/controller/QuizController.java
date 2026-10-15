@@ -48,7 +48,7 @@ public class QuizController {
             @RequestBody QuizRequest request,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         QuizResponse response = quizService.createQuiz(sectionId, request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -61,9 +61,24 @@ public class QuizController {
             @PathVariable Long sectionId,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         List<QuizListDto> quizzes = quizService.getQuizzesBySection(sectionId, userId);
         return ResponseEntity.ok(quizzes);
+    }
+
+    /**
+     * 인증 주체에서 사용자 ID를 추출한다. 로그인하지 않았거나(익명 등) 토큰이 아직
+     * 붙지 않은 상태로 요청이 들어오면, 원인을 알 수 없는 400 대신 401로 응답한다.
+     */
+    private Long requireUserId(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        try {
+            return Long.parseLong(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효한 로그인 정보가 아닙니다.");
+        }
     }
 
     /**
