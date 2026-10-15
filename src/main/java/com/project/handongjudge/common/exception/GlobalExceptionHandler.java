@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +24,19 @@ public class GlobalExceptionHandler {
         response.put("success", false);
         response.put("message", "세션이 만료되었습니다. 새로고침 후 다시 로그인해 주세요. 작성 중인 코드는 그대로 유지됩니다.");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException e) {
+        // ResponseStatusException은 RuntimeException의 하위 타입이라, 이 핸들러가 없으면
+        // 아래 handleRuntimeException(400 고정)에 걸려 컨트롤러가 지정한 상태 코드(예: 401)가
+        // 무시되고 항상 400으로 응답이 나가버림. 반드시 RuntimeException 핸들러보다 먼저 잡아야 함.
+        // (#20 / H-CodeLab_FE#35 에서 처음 발견 - 같은 수정이 #25에도 독립적으로 필요해 함께 포함함)
+        log.warn("Response status exception: {}", e.getMessage());
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", e.getReason() != null ? e.getReason() : "요청을 처리할 수 없습니다.");
+        return ResponseEntity.status(e.getStatus()).body(response);
     }
 
     @ExceptionHandler(CustomException.class)
