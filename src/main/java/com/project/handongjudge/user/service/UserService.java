@@ -211,7 +211,8 @@ public class UserService {
     }
 
     /**
-     * 로그인한 사용자의 대시보드에 보여줄 수강 중인 과목들 조회 (강사 분반 + 수강 분반)
+     * 로그인한 사용자의 대시보드에 보여줄 참여한(수강 중인) 과목들 조회
+     * 직접 개설한 분반(강사 분반, 교수 실습용 등록 포함)은 관리 중인 수업 목록에서만 보여주므로 제외한다.
      */
     public List<DashboardCourseDto> getDashboardCourses(Long userId) {
         // 사용자 정보 조회
@@ -220,11 +221,7 @@ public class UserService {
 
         List<DashboardCourseDto> result = new ArrayList<>();
 
-        // 1. 자신이 instructor인 분반들 (새 수업 만들기로 생성한 경우 포함 - 역할 무관)
-        List<DashboardCourseDto> instructorSections = enrollmentRepository.findDashboardCoursesByInstructorId(userId);
-        result.addAll(instructorSections);
-
-        // 2. 자신이 학생으로 수강 등록된 분반들
+        // 자신이 수강 등록된 분반들 (교수 실습용 등록 제외)
         List<DashboardCourseDto> enrolledSections = enrollmentRepository.findDashboardCoursesByUserId(userId);
         result.addAll(enrolledSections);
 

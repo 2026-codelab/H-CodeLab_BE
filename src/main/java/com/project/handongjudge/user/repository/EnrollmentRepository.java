@@ -133,6 +133,7 @@ public interface EnrollmentRepository extends CrudRepository<Enrollment, Long> {
             "LEFT JOIN UserReadStatus urs ON urs.notice.id = n.id AND urs.user.id = :userId " +
             "LEFT JOIN Assignment a ON a.section.id = s.id " +
             "WHERE e.user.id = :userId " +
+            "AND (e.roleInCourse IS NULL OR e.roleInCourse <> 'INSTRUCTOR') " +  // 교수 실습용 등록 제외
             "GROUP BY c.id, c.title, s.id, s.sectionNumber, u.name, s.createdAt, s.year, s.semester, s.enrollmentCode, s.active")
     List<DashboardCourseDto> findDashboardCoursesByUserId(@Param("userId") Long userId);
 
