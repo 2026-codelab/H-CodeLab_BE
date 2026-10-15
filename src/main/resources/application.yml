@@ -84,6 +84,14 @@ domjudge:
   username: ${DOMJUDGE_ID}
   password: ${DOMJUDGE_PW}
 
+# 힌트 생성 기능용 LLM 클라이언트 설정.
+# 지금은 GPT API를 쓰지만, base-url/api-key/model만 바꾸면 OpenAI 호환 API를 쓰는
+# 로컬 vLLM 서버로 코드 수정 없이 교체 가능 (com.project.handongjudge.hint.llm 참고).
+llm:
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  api-key: ${LLM_API_KEY}
+  model: ${LLM_MODEL:gpt-4o-mini}
+
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   password-reset:
