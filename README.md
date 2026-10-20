@@ -28,6 +28,7 @@ H-CodeLab의 **Backend API 서버**이다. Spring Boot 기반으로 수업·과�
 - **문제/과제**: 문제 CRUD, 문제집, 과제 배포, 제출 현황·채점·성적 관리
 - **코딩 테스트**: Quiz 생성·문제 구성·학생 진행 현황·성적 집계
 - **자동 채점**: DOMjudge API 연동, 제출 결과 폴링·SSE 기반 테스트 출력
+- **AI 단계별 힌트**: 컴파일/런타임 오류를 분류해 LLM으로 힌트 생성, 반복 실수 횟수에 따라 소크라테스식→직접 제시로 단계 상승, 정답 유출 방지 2중 검증 게이트(정확성·유출) 적용
 - **커뮤니티**: Q&A, 댓글, 추천, 알림
 - **시스템 관리**: SuperAdmin API, 시스템 공지·가이드
 
@@ -55,31 +56,22 @@ React Frontend → Nginx → Spring Boot API → MariaDB / Redis / DOMjudge(Judg
 <table>
   <tr>
     <td align="center">
-      <a href="https://github.com/dnqudgml12">
-        <img src="https://github.com/dnqudgml12.png" width="100" alt="우병희"/>
+      <a href="https://github.com/BackSeungBeom">
+        <img src="https://github.com/BackSeungBeom.png" width="100" alt="백승범"/>
       </a>
       <br />
-      <b>우병희</b>
+      <b>백승범</b>
       <br />
-      Frontend, Backend
+      Backend, Frontend
     </td>
     <td align="center">
-      <a href="https://github.com/seowon1112">
-        <img src="https://github.com/seowon1112.png" width="100" alt="곽서원"/>
+      <a href="https://github.com/kayoung-dev">
+        <img src="https://github.com/kayoung-dev.png" width="100" alt="김가영"/>
       </a>
       <br />
-      <b>곽서원</b>
+      <b>김가영</b>
       <br />
-      Frontend, Backend
-    </td>
-    <td align="center">
-      <a href="https://github.com/Diggydogg">
-        <img src="https://github.com/Diggydogg.png" width="100" alt="윤동혁"/>
-      </a>
-      <br />
-      <b>윤동혁</b>
-      <br />
-      Infra, Backend
+      Backend, Frontend
     </td>
   </tr>
 </table>
@@ -143,6 +135,12 @@ DOMJUDGE_URL=https://your-domjudge-url
 DOMJUDGE_ID=admin
 DOMJUDGE_PW=your_password
 
+# LLM (AI 단계별 힌트 생성)
+# base-url/model만 바꾸면 OpenAI 호환 API를 쓰는 로컬 vLLM 서버로도 교체 가능
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_llm_api_key
+LLM_MODEL=gpt-4o-mini
+
 # Redis
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
@@ -205,6 +203,7 @@ REACT_APP_API_URL=http://localhost:8080/api
 | Quiz | `/api/sections/{sectionId}/quizzes` | 코딩 테스트 관리 |
 | Submission | `/api/submissions` | 코드 제출·결과 조회 |
 | Grade | `/api/sections/{sectionId}/assignments/{assignmentId}/grades` | 성적 관리 |
+| Hint | `/api/problems/{problemId}/hint` | AI 단계별 힌트 생성·조회 |
 | Community | `/api/community/*` | Q&A, 댓글, 추천, 알림 |
 | Notice | `/api/notices` | 수업 공지 |
 | System | `/api/system-notices`, `/api/system-guides` | 시스템 공지·가이드 |
@@ -262,6 +261,7 @@ REACT_APP_API_URL=http://localhost:8080/api
 │   ├── 📁 quiz/           # 코딩 테스트
 │   ├── 📁 submission/     # 제출, SSE, 채점 폴링
 │   ├── 📁 domjudge/       # DOMjudge API 연동
+│   ├── 📁 hint/           # AI 단계별 힌트 생성 (LLM 연동)
 │   ├── 📁 grade/          # 성적
 │   ├── 📁 community/      # Q&A, 댓글, 알림
 │   ├── 📁 notice/         # 공지, 시스템 가이드
