@@ -52,7 +52,7 @@ public class AssignmentController {
             @RequestBody AssignmentRequest request,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.createAssignment(sectionId, request, userId)
         );
@@ -91,7 +91,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             Authentication authentication  // 추가
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.getAssignmentInfo(assignmentId, userId)  // userId 전달
         );
@@ -132,7 +132,7 @@ public class AssignmentController {
             @RequestBody AssignmentRequest request,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.updateAssignment(sectionId, assignmentId, request, userId)
         );
@@ -143,7 +143,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.getUserSubmissionStatus(sectionId, assignmentId, userId)
         );
@@ -163,7 +163,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             @RequestBody Map<String, Boolean> request,
             Authentication authentication) {
-        Long instructorId = Long.parseLong(authentication.getName());
+        Long instructorId = requireUserId(authentication);
         Boolean active = request.get("active");
         AssignmentResponse response = assignmentService.toggleAssignmentActive(assignmentId, active, instructorId);
         return ResponseEntity.ok(response);
@@ -177,7 +177,7 @@ public class AssignmentController {
             @PathVariable Long sectionId,
             @PathVariable Long assignmentId,
             Authentication authentication) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         assignmentService.deleteAssignment(sectionId, assignmentId, userId);
         return ResponseEntity.ok().build();
     }
@@ -213,7 +213,7 @@ public class AssignmentController {
             @PathVariable Long userId,
             @PathVariable Long problemId,
             Authentication authentication) {
-        Long instructorId = Long.parseLong(authentication.getName());
+        Long instructorId = requireUserId(authentication);
         StudentAcceptedCodeResponse response = assignmentService.getStudentAcceptedCode(
                 sectionId, assignmentId, userId, problemId, instructorId);
         return ResponseEntity.ok(response);
@@ -228,7 +228,7 @@ public class AssignmentController {
             @PathVariable Long sectionId,
             Authentication authentication
     ) {
-        Long tutorId = Long.parseLong(authentication.getName());
+        Long tutorId = requireUserId(authentication);
         List<Assignment> assignments = assignmentRepository.findAllAssignmentsBySectionId(sectionId);
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
