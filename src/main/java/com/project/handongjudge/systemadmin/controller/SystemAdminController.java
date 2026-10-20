@@ -177,6 +177,11 @@ public class SystemAdminController {
                 return buildErrorResponse("유효하지 않은 역할입니다: " + request.getRole());
             }
 
+            // 전역 ADMIN은 담당하지 않는 수업의 학생 데이터까지 열람 가능하게 하므로 당분간 할당을 막음
+            if (newRole == User.Role.ADMIN) {
+                return buildErrorResponse("관리자 역할은 현재 할당할 수 없습니다.");
+            }
+
             com.project.handongjudge.user.dto.UserDto updated =
                     systemAdminService.updateUserRole(userId, newRole);
 
