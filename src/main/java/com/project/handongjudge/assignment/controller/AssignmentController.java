@@ -17,8 +17,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import com.project.handongjudge.assignment.dto.StudentProgressResponse;
 import com.project.handongjudge.assignment.dto.StudentAcceptedCodeResponse;
 import com.project.handongjudge.common.ZipExportPathUtils;
@@ -50,7 +52,7 @@ public class AssignmentController {
             @RequestBody AssignmentRequest request,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.createAssignment(sectionId, request, userId)
         );
@@ -60,10 +62,27 @@ public class AssignmentController {
     public ResponseEntity<List<AssignmentResponse>> getAssignmentsBySection(
             @PathVariable Long sectionId,
             Authentication authentication) {  // Authentication 추가
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.getAssignmentsBySection(sectionId, userId)  // userId 전달
         );
+    }
+
+    /**
+     * 인증 주체에서 사용자 ID를 추출한다. 로그인 복원이 끝나기 전(비로그인/익명) 상태로
+     * 요청이 들어오면 Long.parseLong()에서 NumberFormatException이 나서 GlobalExceptionHandler의
+     * RuntimeException catch-all(메시지 없으면 "서버 오류가 발생했습니다")로 빠져 원인을 알 수
+     * 없는 오류가 나던 문제를 막기 위해, 여기서 명확히 401로 응답한다.
+     */
+    private Long requireUserId(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        try {
+            return Long.parseLong(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효한 로그인 정보가 아닙니다.");
+        }
     }
 
     @GetMapping("/{assignmentId}")
@@ -72,7 +91,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             Authentication authentication  // 추가
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.getAssignmentInfo(assignmentId, userId)  // userId 전달
         );
@@ -113,7 +132,7 @@ public class AssignmentController {
             @RequestBody AssignmentRequest request,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.updateAssignment(sectionId, assignmentId, request, userId)
         );
@@ -124,7 +143,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             Authentication authentication
     ) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         return ResponseEntity.ok(
                 assignmentService.getUserSubmissionStatus(sectionId, assignmentId, userId)
         );
@@ -144,7 +163,7 @@ public class AssignmentController {
             @PathVariable Long assignmentId,
             @RequestBody Map<String, Boolean> request,
             Authentication authentication) {
-        Long instructorId = Long.parseLong(authentication.getName());
+        Long instructorId = requireUserId(authentication);
         Boolean active = request.get("active");
         AssignmentResponse response = assignmentService.toggleAssignmentActive(assignmentId, active, instructorId);
         return ResponseEntity.ok(response);
@@ -158,7 +177,7 @@ public class AssignmentController {
             @PathVariable Long sectionId,
             @PathVariable Long assignmentId,
             Authentication authentication) {
-        Long userId = Long.parseLong(authentication.getName());
+        Long userId = requireUserId(authentication);
         assignmentService.deleteAssignment(sectionId, assignmentId, userId);
         return ResponseEntity.ok().build();
     }
@@ -194,7 +213,7 @@ public class AssignmentController {
             @PathVariable Long userId,
             @PathVariable Long problemId,
             Authentication authentication) {
-        Long instructorId = Long.parseLong(authentication.getName());
+        Long instructorId = requireUserId(authentication);
         StudentAcceptedCodeResponse response = assignmentService.getStudentAcceptedCode(
                 sectionId, assignmentId, userId, problemId, instructorId);
         return ResponseEntity.ok(response);
@@ -209,7 +228,7 @@ public class AssignmentController {
             @PathVariable Long sectionId,
             Authentication authentication
     ) {
-        Long tutorId = Long.parseLong(authentication.getName());
+        Long tutorId = requireUserId(authentication);
         List<Assignment> assignments = assignmentRepository.findAllAssignmentsBySectionId(sectionId);
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
