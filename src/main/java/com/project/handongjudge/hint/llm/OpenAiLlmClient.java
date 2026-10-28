@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * GPT API 구현체. application.yml의 llm.base-url/llm.api-key/llm.model만 바꾸면
- * 같은 코드로 OpenAI 호환 API를 쓰는 로컬 vLLM 서버도 그대로 호출할 수 있다.
+ * OpenAI 호환 API(/chat/completions) 구현체. 연구실 로컬 LLM(vLLM)을 호출한다.
+ * 서버나 모델을 바꿀 때는 application.yml의 llm.base-url/llm.api-key/llm.model만 바꾼다.
  */
 @Slf4j
 @Component
