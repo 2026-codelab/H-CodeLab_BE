@@ -136,10 +136,10 @@ DOMJUDGE_ID=admin
 DOMJUDGE_PW=your_password
 
 # LLM (AI 단계별 힌트 생성)
-# base-url/model만 바꾸면 OpenAI 호환 API를 쓰는 로컬 vLLM 서버로도 교체 가능
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=your_llm_api_key
-LLM_MODEL=gpt-4o-mini
+# 연구실 로컬 LLM(vLLM). 키는 LLM 서버 관리자에게 받는다
+LLM_BASE_URL=https://ai.walab.info/v1
+LLM_API_KEY=your_vllm_api_key
+LLM_MODEL=lab-llm
 
 # Redis
 REDIS_HOST=127.0.0.1
