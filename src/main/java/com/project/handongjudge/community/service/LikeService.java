@@ -40,6 +40,10 @@ public class LikeService {
         Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new CustomException("질문을 찾을 수 없습니다"));
 
+        if (question.getAuthor().getId().equals(userId)) {
+            throw new CustomException("본인이 작성한 글은 추천할 수 없습니다", "SELF_LIKE_NOT_ALLOWED");
+        }
+
         Optional<QuestionLike> existingLike = questionLikeRepository.findByQuestionAndUser(question, user);
 
         if (existingLike.isPresent()) {
@@ -82,6 +86,10 @@ public class LikeService {
 
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new CustomException("댓글을 찾을 수 없습니다"));
+
+        if (comment.getAuthor().getId().equals(userId)) {
+            throw new CustomException("본인이 작성한 댓글은 추천할 수 없습니다", "SELF_LIKE_NOT_ALLOWED");
+        }
 
         Optional<CommentLike> existingLike = commentLikeRepository.findByCommentAndUser(comment, user);
 
